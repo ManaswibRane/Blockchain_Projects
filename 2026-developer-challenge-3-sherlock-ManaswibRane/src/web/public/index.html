@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sherlock — Bitcoin Chain Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#020810;--abyss:#040d1a;--deep:#071428;--surface:#0a1d38;
+  --lift:#0d2245;--edge:#0f2d5a;--wire:#163666;
+  --cyan:#00d4ff;--cyan-dim:#0099bb;--cyan-glow:rgba(0,212,255,0.12);
+  --cyan-ghost:rgba(0,212,255,0.04);--cyan-bright:#40e8ff;
+  --text:#d6eaf8;--text-bright:#f0f8ff;--muted:#3a6b99;--faint:#0c2540;
+  --green:#00ff9d;--red:#ff4d6a;--orange:#ff9940;--violet:#a78bfa;--amber:#f59e0b;
+  --scan:rgba(0,212,255,0.018);
+  --ff-mono:'IBM Plex Mono','Courier New',monospace;
+  --ff-display:'Orbitron',sans-serif;
+  --ff-body:'Outfit',sans-serif;
+  --r:3px;--r2:6px;--r3:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--void);color:var(--text);font-family:var(--ff-body);font-size:13px;line-height:1.6;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,var(--scan) 2px,var(--scan) 4px);pointer-events:none;z-index:1000;}
+body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(0,100,200,0.12) 0%,transparent 70%);pointer-events:none;z-index:0;}
+
+/* ── Header ── */
+.hdr{background:rgba(4,13,26,0.96);border-bottom:1px solid var(--edge);padding:0 28px;height:56px;display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:200;backdrop-filter:blur(12px);}
+.hdr::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.35;}
+.logo{font-family:var(--ff-display);font-size:18px;font-weight:700;letter-spacing:4px;color:var(--cyan);text-shadow:0 0 20px rgba(0,212,255,.45);}
+.logo-sub{font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:2px;}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.badge{font-family:var(--ff-mono);font-size:8px;color:var(--cyan);border:1px solid var(--cyan-dim);padding:3px 10px;border-radius:2px;letter-spacing:2px;background:rgba(0,212,255,.05);}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Layout ── */
+.layout{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 56px);}
+.sidebar{background:var(--abyss);border-right:1px solid var(--edge);overflow-y:auto;position:relative;z-index:1;display:flex;flex-direction:column;}
+.main{overflow-y:auto;position:relative;z-index:1;background:var(--void);}
+.main-inner{padding:24px;max-width:1200px;}
+
+/* ── Sidebar ── */
+.sb-section{border-bottom:1px solid var(--edge);padding:14px 16px;}
+.sb-title{font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:10px;}
+.file-item{padding:10px 12px;border-radius:var(--r2);border:1px solid transparent;cursor:pointer;margin-bottom:6px;transition:all .15s;}
+.file-item:hover{background:var(--surface);border-color:var(--edge);}
+.file-item.active{background:rgba(0,212,255,.06);border-color:rgba(0,212,255,.25);}
+.file-name{font-family:var(--ff-mono);font-size:10px;color:var(--cyan);margin-bottom:3px;}
+.file-meta{font-size:10px;color:var(--muted);}
+
+/* Upload strip inside sidebar */
+.sb-upload{padding:12px 16px;border-bottom:1px solid var(--edge);}
+.upload-btn{width:100%;padding:8px 12px;background:rgba(0,212,255,.05);border:1px dashed var(--wire);border-radius:var(--r2);color:var(--muted);font-family:var(--ff-mono);font-size:8px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:all .15s;text-align:center;}
+.upload-btn:hover{border-color:var(--cyan-dim);color:var(--cyan);background:var(--cyan-ghost);}
+.upload-progress{font-family:var(--ff-mono);font-size:8px;color:var(--cyan);margin-top:6px;display:none;}
+#sb-upload-input{display:none;}
+
+/* ── Filters ── */
+.controls{padding:12px 16px;display:flex;flex-direction:column;gap:8px;flex:1;}
+.ctrl-row{display:flex;gap:6px;align-items:center;}
+.ctrl-label{font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;min-width:50px;}
+select,input[type=text]{flex:1;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);color:var(--text);font-family:var(--ff-mono);font-size:9px;padding:5px 8px;outline:none;transition:border .15s;}
+select:focus,input[type=text]:focus{border-color:var(--cyan-dim);}
+select option{background:var(--deep);color:var(--text);}
+
+/* ── Pages ── */
+.page{display:none;}.page.active{display:block;}
+.welcome{text-align:center;padding:80px 40px;}
+.welcome-icon{font-size:48px;opacity:.15;margin-bottom:16px;}
+.welcome h1{font-family:var(--ff-display);font-size:24px;font-weight:700;letter-spacing:3px;color:var(--text-bright);margin-bottom:12px;}
+.welcome p{color:var(--muted);font-size:13px;max-width:400px;margin:0 auto;line-height:1.8;}
+
+/* ── Stats row ── */
+.stats-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;}
+.stat-card{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r2);padding:14px 16px;flex:1;min-width:110px;position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;top:0;left:0;width:2px;height:100%;background:var(--cyan);opacity:.3;}
+.stat-lbl{font-family:var(--ff-mono);font-size:7px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+.stat-val{font-size:22px;font-weight:700;letter-spacing:1px;line-height:1;color:var(--text-bright);}
+.stat-val.cyan{color:var(--cyan);}.stat-val.green{color:var(--green);}.stat-val.amber{color:var(--amber);}
+.stat-val.red{color:var(--red);}.stat-val.violet{color:var(--violet);}
+.stat-unit{font-size:10px;color:var(--muted);margin-left:3px;}
+
+/* ── Sections ── */
+.section{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r3);margin-bottom:16px;overflow:hidden;}
+.section-hdr{padding:12px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;border-bottom:1px solid transparent;transition:background .15s;}
+.section-hdr:hover{background:var(--lift);}
+.section-hdr.open{border-bottom-color:var(--edge);}
+.section-hdr h3{font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;flex:1;color:var(--text);}
+.section-ico{color:var(--cyan);font-size:12px;}
+.chevron{font-size:9px;color:var(--muted);transition:.2s;}
+.section-hdr.open .chevron{transform:rotate(180deg);}
+.section-body{display:none;padding:18px;}
+.section-body.open{display:block;}
+
+/* ── Tables ── */
+.htable{width:100%;border-collapse:collapse;font-size:11px;}
+.htable th{text-align:left;padding:7px 10px;background:var(--lift);color:var(--muted);font-family:var(--ff-mono);font-size:7px;letter-spacing:2px;text-transform:uppercase;border-bottom:1px solid var(--edge);}
+.htable td{padding:8px 10px;border-bottom:1px solid var(--faint);vertical-align:middle;}
+.htable tr:last-child td{border-bottom:none;}
+.htable tr:hover td{background:var(--cyan-ghost);}
+
+/* ── Pills ── */
+.pill{display:inline-block;padding:2px 7px;border-radius:2px;font-family:var(--ff-mono);font-size:7px;font-weight:600;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;}
+.pill-simple_payment{background:rgba(0,212,255,.1);color:var(--cyan);}
+.pill-consolidation{background:rgba(255,153,64,.1);color:var(--orange);}
+.pill-coinjoin{background:rgba(167,139,250,.15);color:var(--violet);}
+.pill-self_transfer{background:rgba(0,255,157,.08);color:var(--green);}
+.pill-batch_payment{background:rgba(0,212,255,.06);color:var(--cyan-dim);}
+.pill-unknown{background:rgba(58,107,153,.15);color:var(--muted);}
+.pill-detected{background:rgba(0,255,157,.1);color:var(--green);border:1px solid rgba(0,255,157,.2);}
+.pill-not-detected{background:rgba(12,37,64,.5);color:var(--muted);border:1px solid var(--faint);}
+.pill-high{background:rgba(0,255,157,.1);color:var(--green);}
+.pill-medium{background:rgba(255,153,64,.1);color:var(--orange);}
+.pill-low{background:rgba(255,77,106,.1);color:var(--red);}
+
+/* ── TX list ── */
+.tx-item{border-bottom:1px solid var(--faint);padding:8px 0;cursor:pointer;display:grid;grid-template-columns:160px 1fr auto auto 80px;gap:10px;align-items:center;transition:background .1s;border-radius:var(--r);}
+.tx-item:hover{background:var(--cyan-ghost);}
+.tx-item:last-child{border-bottom:none;}
+.tx-id{font-family:var(--ff-mono);font-size:9px;color:var(--muted);}
+.tx-id span{color:var(--cyan);}
+.tx-detail-expand{display:none;padding:12px;background:var(--void);border:1px solid var(--faint);border-radius:var(--r2);margin:6px 0 12px;font-size:11px;}
+.tx-detail-expand.open{display:block;}
+
+/* ── Flags ── */
+.flag-row{display:flex;flex-wrap:wrap;gap:4px;}
+.flag{padding:2px 6px;border-radius:2px;font-family:var(--ff-mono);font-size:7px;letter-spacing:.5px;}
+.flag.on{background:rgba(0,255,157,.1);color:var(--green);border:1px solid rgba(0,255,157,.2);}
+
+/* ── Charts ── */
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.bar-label{font-family:var(--ff-mono);font-size:9px;color:var(--muted);min-width:80px;}
+.bar-bg{flex:1;height:8px;background:var(--faint);border-radius:2px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:2px;transition:width 1s cubic-bezier(.4,0,.2,1);}
+.bar-val{font-family:var(--ff-mono);font-size:9px;color:var(--text-bright);min-width:70px;text-align:right;}
+.cls-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cls-item{background:var(--lift);border:1px solid var(--edge);border-radius:var(--r2);padding:10px 12px;}
+.cls-name{font-family:var(--ff-mono);font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;}
+.cls-count{font-size:18px;font-weight:700;color:var(--text-bright);}
+.cls-pct{font-size:10px;color:var(--muted);}
+
+/* ── Block tabs ── */
+.block-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px;}
+.block-tab{padding:6px 14px;background:var(--surface);border:1px solid var(--edge);border-radius:var(--r2);cursor:pointer;font-family:var(--ff-mono);font-size:9px;color:var(--muted);transition:all .15s;letter-spacing:1px;}
+.block-tab:hover{border-color:var(--cyan-dim);color:var(--text);}
+.block-tab.active{background:rgba(0,212,255,.08);border-color:var(--cyan-dim);color:var(--cyan);}
+
+/* ── Pagination ── */
+.pagination{display:flex;gap:6px;align-items:center;justify-content:center;padding:16px 0;}
+.pg-btn{padding:5px 12px;background:var(--surface);border:1px solid var(--edge);border-radius:var(--r);cursor:pointer;font-family:var(--ff-mono);font-size:9px;color:var(--muted);transition:all .15s;}
+.pg-btn:hover:not(:disabled){border-color:var(--cyan-dim);color:var(--cyan);}
+.pg-btn:disabled{opacity:.3;cursor:not-allowed;}
+.pg-info{font-family:var(--ff-mono);font-size:9px;color:var(--muted);}
+
+/* ── Spinner ── */
+.spinner-wrap{text-align:center;padding:60px;color:var(--muted);}
+.spinner{width:32px;height:32px;border:2px solid var(--wire);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner-label{font-family:var(--ff-mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;}
+
+/* ── CHAT FAB ── */
+#chat-fab{position:fixed;bottom:28px;right:28px;z-index:500;width:56px;height:56px;border-radius:50%;background:var(--cyan);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 0 rgba(0,212,255,.6),0 8px 28px rgba(0,0,0,.7);animation:fab-pulse 3s infinite;transition:transform .2s,background .15s;}
+#chat-fab:hover{transform:scale(1.1);background:var(--cyan-bright);}
+#chat-fab svg{width:24px;height:24px;fill:#000;}
+@keyframes fab-pulse{0%{box-shadow:0 0 0 0 rgba(0,212,255,.5),0 8px 28px rgba(0,0,0,.7);}70%{box-shadow:0 0 0 14px rgba(0,212,255,0),0 8px 28px rgba(0,0,0,.7);}100%{box-shadow:0 0 0 0 rgba(0,212,255,0),0 8px 28px rgba(0,0,0,.7);}}
+
+/* ── CHAT PANEL ── */
+#chat-panel{position:fixed;bottom:90px;right:24px;z-index:499;width:620px;max-width:calc(100vw - 48px);max-height:90vh;background:var(--deep);border:1px solid var(--edge);border-radius:var(--r3);box-shadow:0 40px 100px rgba(0,0,0,.8),0 0 0 1px rgba(0,212,255,.1);display:flex;flex-direction:column;overflow:hidden;transform:translateY(20px) scale(.96);opacity:0;pointer-events:none;transition:transform .25s cubic-bezier(.4,0,.2,1),opacity .25s;}
+#chat-panel.open{transform:translateY(0) scale(1);opacity:1;pointer-events:all;}
+.cp-hdr{display:flex;align-items:center;gap:10px;padding:14px 16px;background:rgba(4,13,26,.8);border-bottom:1px solid var(--edge);flex-shrink:0;position:relative;}
+.cp-hdr::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--cyan),rgba(0,212,255,.2),transparent);}
+.cp-title{font-family:var(--ff-display);font-size:13px;font-weight:700;letter-spacing:4px;color:var(--cyan);text-shadow:0 0 16px rgba(0,212,255,.4);}
+.cp-sub{font-family:var(--ff-mono);font-size:7px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.cp-ctx-pill{margin-left:auto;font-family:var(--ff-mono);font-size:7px;padding:2px 7px;border-radius:2px;background:rgba(0,255,157,.08);border:1px solid rgba(0,255,157,.2);color:var(--green);letter-spacing:1px;white-space:nowrap;display:none;}
+.cp-ctx-pill.on{display:inline;}
+.cp-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:2px 4px;transition:color .15s;flex-shrink:0;}
+.cp-close:hover{color:var(--text);}
+#cp-config{padding:12px 14px;border-bottom:1px solid var(--edge);background:rgba(2,8,16,.5);flex-shrink:0;}
+.cp-config-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.cp-config-row:last-child{margin-bottom:0;}
+.prov-toggle{display:flex;gap:2px;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);padding:3px;flex-shrink:0;}
+.prov-btn{padding:5px 12px;border:none;border-radius:2px;font-family:var(--ff-mono);font-size:8px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s;}
+.prov-btn.on{background:var(--cyan);color:#000;font-weight:700;}
+.prov-btn:hover:not(.on){color:var(--text);}
+#cp-model{flex:1;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);color:var(--text);font-family:var(--ff-mono);font-size:9px;padding:6px 8px;outline:none;cursor:pointer;}
+#cp-model option,#cp-model optgroup{background:var(--deep);color:var(--text);}
+#cp-key{flex:1;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);color:var(--text);font-family:var(--ff-mono);font-size:10px;padding:7px 10px;outline:none;transition:border .15s;min-width:0;}
+#cp-key:focus{border-color:var(--cyan-dim);box-shadow:0 0 0 2px var(--cyan-glow);}
+.cp-key-status{font-family:var(--ff-mono);font-size:7px;letter-spacing:1px;padding:2px 0;}
+#cfg-toggle{font-family:var(--ff-mono);font-size:8px;color:var(--muted);background:none;border:none;cursor:pointer;letter-spacing:1px;text-transform:uppercase;padding:2px 4px;transition:color .15s;flex-shrink:0;}
+#cfg-toggle:hover{color:var(--cyan);}
+#cp-file-strip{padding:6px 12px;border-bottom:1px solid var(--edge);background:rgba(0,212,255,.02);flex-shrink:0;display:flex;align-items:center;gap:8px;}
+.cp-file-btn{font-family:var(--ff-mono);font-size:8px;padding:4px 10px;border:1px solid var(--wire);border-radius:2px;color:var(--muted);cursor:pointer;background:transparent;transition:all .15s;letter-spacing:.5px;white-space:nowrap;}
+.cp-file-btn:hover{border-color:var(--cyan-dim);color:var(--cyan);}
+.cp-file-name{font-family:var(--ff-mono);font-size:8px;color:var(--cyan);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cp-file-clear{font-size:11px;color:var(--muted);cursor:pointer;transition:color .15s;flex-shrink:0;}
+.cp-file-clear:hover{color:var(--red);}
+#cp-file-input{display:none;}
+#cp-ctx-strip{display:none;align-items:center;gap:8px;padding:7px 14px;background:rgba(0,212,255,.03);border-bottom:1px solid rgba(0,212,255,.1);font-size:10px;flex-shrink:0;}
+#cp-ctx-strip.on{display:flex;}
+.ctx-glow{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);flex-shrink:0;}
+.ctx-lbl{font-family:var(--ff-mono);font-size:7px;color:var(--cyan);letter-spacing:1.5px;text-transform:uppercase;}
+.ctx-text{color:var(--text);font-size:9px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ctx-clear{font-family:var(--ff-mono);font-size:7px;color:var(--muted);cursor:pointer;transition:color .15s;white-space:nowrap;}
+.ctx-clear:hover{color:var(--red);}
+.cp-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;scroll-behavior:smooth;}
+.cp-msgs::-webkit-scrollbar{width:2px;}
+.cp-msgs::-webkit-scrollbar-thumb{background:var(--wire);border-radius:2px;}
+.cp-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;flex:1;padding:24px;text-align:center;}
+.cp-empty-icon{font-family:var(--ff-display);font-size:24px;font-weight:700;letter-spacing:5px;color:var(--cyan);opacity:.15;}
+.cp-empty p{font-size:11px;color:var(--muted);line-height:1.6;max-width:280px;}
+.msg{display:flex;gap:8px;animation:msgIn .2s ease;max-width:92%;}
+@keyframes msgIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{align-self:flex-end;flex-direction:row-reverse;}
+.msg-av{width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-family:var(--ff-display);font-size:9px;font-weight:700;flex-shrink:0;letter-spacing:1px;}
+.msg-av.ai{background:var(--cyan);color:#000;}
+.msg-av.user{background:var(--lift);border:1px solid var(--wire);color:var(--muted);font-size:8px;font-family:var(--ff-mono);}
+.msg-body{background:var(--surface);border:1px solid var(--wire);border-radius:var(--r2);padding:9px 13px;font-size:12px;line-height:1.65;word-break:break-word;color:var(--text);}
+.msg.user .msg-body{background:rgba(0,212,255,.05);border-color:rgba(0,212,255,.15);}
+.msg-body code{font-family:var(--ff-mono);font-size:9px;background:var(--void);border:1px solid var(--faint);padding:1px 4px;border-radius:2px;color:var(--cyan);}
+.msg-body strong{color:var(--cyan-bright);font-weight:600;}
+.msg-body em{color:var(--muted);font-style:italic;}
+.msg-body ul{margin:6px 0 6px 14px;}
+.msg-body li{margin-bottom:2px;}
+.msg-body.err{background:rgba(255,77,106,.05);border-color:rgba(255,77,106,.2);color:var(--red);}
+.msg-body svg{max-width:100%;height:auto;display:block;margin:10px 0;border-radius:var(--r2);}
+.typing-dots{display:flex;gap:4px;align-items:center;padding:2px 0;}
+.typing-dots span{width:5px;height:5px;border-radius:50%;background:var(--cyan);opacity:.3;animation:dot .9s infinite;}
+.typing-dots span:nth-child(2){animation-delay:.2s;}
+.typing-dots span:nth-child(3){animation-delay:.4s;}
+@keyframes dot{0%,100%{opacity:.2;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+.cp-prompts{display:flex;gap:4px;flex-wrap:wrap;padding:8px 12px 0;flex-shrink:0;}
+.qp-btn{font-family:var(--ff-mono);font-size:7px;padding:3px 8px;border:1px solid var(--wire);border-radius:2px;color:var(--muted);cursor:pointer;letter-spacing:.5px;transition:all .15s;background:transparent;}
+.qp-btn:hover{border-color:var(--cyan-dim);color:var(--cyan);background:var(--cyan-ghost);}
+.cp-input-row{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--edge);background:var(--abyss);flex-shrink:0;}
+.cp-input{flex:1;background:var(--surface);border:1px solid var(--wire);border-radius:var(--r);color:var(--text);font-family:var(--ff-body);font-size:12px;padding:8px 11px;outline:none;resize:none;height:38px;max-height:110px;overflow-y:auto;line-height:1.5;transition:border .15s;}
+.cp-input:focus{border-color:var(--cyan-dim);box-shadow:0 0 0 2px var(--cyan-glow);}
+.cp-send{width:38px;height:38px;background:var(--cyan);border:none;border-radius:var(--r);color:#000;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;}
+.cp-send:hover{background:var(--cyan-bright);box-shadow:0 0 12px rgba(0,212,255,.5);}
+.cp-send:disabled{background:var(--wire);color:var(--muted);cursor:not-allowed;}
+.stream-cursor{display:inline-block;width:2px;height:13px;background:var(--cyan);border-radius:1px;margin-left:2px;vertical-align:middle;animation:blink .7s steps(1) infinite;box-shadow:0 0 6px var(--cyan);}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.msg.streaming .msg-body{border-color:rgba(0,212,255,.25);background:rgba(0,212,255,.04);}
+
+@media(max-width:768px){.layout{grid-template-columns:1fr;}.sidebar{display:none;}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div>
+    <div class="logo">SHERLOCK</div>
+    <div class="logo-sub">Bitcoin Chain Analysis Engine</div>
+  </div>
+  <div class="hdr-right">
+    <div class="dot"></div>
+    <div class="badge">MAINNET</div>
+    <div class="badge" id="hdr-status">LOADING…</div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <!-- Pre-analyzed files -->
+    <div class="sb-section">
+      <div class="sb-title">Analyzed Files</div>
+      <div id="file-list"><div style="color:var(--muted);font-size:10px;font-family:var(--ff-mono);padding:4px 0">Loading…</div></div>
+    </div>
+
+    <!-- Upload new block files -->
+    <div class="sb-upload">
+      <div class="sb-title">Upload New Block Files</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+        <div>
+          <div style="font-family:var(--ff-mono);font-size:7px;color:var(--muted);letter-spacing:1.5px;margin-bottom:3px;">BLK*.DAT</div>
+          <input type="file" id="uf-blk" accept=".dat" style="width:100%;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);color:var(--muted);font-family:var(--ff-mono);font-size:9px;padding:5px;cursor:pointer;">
+        </div>
+        <div>
+          <div style="font-family:var(--ff-mono);font-size:7px;color:var(--muted);letter-spacing:1.5px;margin-bottom:3px;">REV*.DAT</div>
+          <input type="file" id="uf-rev" accept=".dat" style="width:100%;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);color:var(--muted);font-family:var(--ff-mono);font-size:9px;padding:5px;cursor:pointer;">
+        </div>
+        <div>
+          <div style="font-family:var(--ff-mono);font-size:7px;color:var(--muted);letter-spacing:1.5px;margin-bottom:3px;">XOR.DAT</div>
+          <input type="file" id="uf-xor" accept=".dat" style="width:100%;background:var(--abyss);border:1px solid var(--wire);border-radius:var(--r);color:var(--muted);font-family:var(--ff-mono);font-size:9px;padding:5px;cursor:pointer;">
+        </div>
+      </div>
+      <button class="upload-btn" onclick="uploadAndAnalyze()">⬡ ANALYZE BLOCK FILES</button>
+      <div class="upload-progress" id="upload-progress">Analyzing…</div>
+      <div id="upload-err" style="font-family:var(--ff-mono);font-size:8px;color:var(--red);margin-top:4px;"></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="controls">
+      <div class="sb-title" style="margin-bottom:8px;">Filters</div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">Type</span>
+        <select id="filter-cls" onchange="applyFilters()">
+          <option value="">All</option>
+          <option value="coinjoin">CoinJoin</option>
+          <option value="consolidation">Consolidation</option>
+          <option value="batch_payment">Batch Payment</option>
+          <option value="self_transfer">Self Transfer</option>
+          <option value="simple_payment">Simple Payment</option>
+          <option value="unknown">Unknown</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">Heuristic</span>
+        <select id="filter-heuristic" onchange="applyFilters()">
+          <option value="">Any</option>
+          <option value="cioh">CIOH</option>
+          <option value="change_detection">Change Detection</option>
+          <option value="coinjoin">CoinJoin</option>
+          <option value="consolidation">Consolidation</option>
+          <option value="self_transfer">Self-Transfer</option>
+          <option value="round_number_payment">Round Number</option>
+          <option value="op_return">OP_RETURN</option>
+          <option value="address_reuse">Addr Reuse</option>
+          <option value="peeling_chain">Peeling Chain</option>
+          <option value="batch_payment">Batch Payment</option>
+          <option value="dust_detection">Dust Detection</option>
+          <option value="output_position">Output Position</option>
+          <option value="address_freshness">Addr Freshness</option>
+          <option value="fee_pattern">Fee Pattern</option>
+          <option value="wallet_fingerprint">Wallet Fingerprint</option>
+        </select>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">Search</span>
+        <input type="text" id="filter-search" placeholder="txid…" oninput="applyFilters()"/>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-label">Flagged</span>
+        <select id="filter-flagged" onchange="applyFilters()">
+          <option value="">All</option>
+          <option value="yes">Flagged Only</option>
+          <option value="no">Not Flagged</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+    <div class="main-inner">
+      <div class="page active" id="page-welcome">
+        <div class="welcome">
+          <div class="welcome-icon">⛓</div>
+          <h1>SHERLOCK</h1>
+          <p>Select a pre-analyzed block file from the sidebar, or upload new <code style="background:var(--faint);padding:2px 5px;border-radius:2px;font-family:var(--ff-mono)">blk/rev/xor.dat</code> files to analyze.</p>
+          <p style="margin-top:16px;font-size:11px;color:var(--muted)">15 chain analysis heuristics · Privacy scoring · Wallet fingerprinting</p>
+        </div>
+      </div>
+      <div class="page" id="page-block">
+        <div id="block-content"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── CHAT FAB ── -->
+<button id="chat-fab" onclick="toggleChat()" title="AI Blockchain Assistant">
+  <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.37 5.07L2 22l4.93-1.37C8.42 21.5 10.15 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-1 13H7v-2h4v2zm6 0h-4v-2h4v2zm0-4H7V9h10v2z"/></svg>
+</button>
+
+<!-- ── CHAT PANEL ── -->
+<div id="chat-panel">
+  <div class="cp-hdr">
+    <div>
+      <div class="cp-title">CHAIN AI</div>
+      <div class="cp-sub">Heuristic Analyst · Bitcoin Expert</div>
+    </div>
+    <span class="cp-ctx-pill" id="cp-ctx-pill">FILE LOADED</span>
+    <button id="cfg-toggle" onclick="toggleConfig()">⚙ API</button>
+    <button class="cp-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div id="cp-config">
+    <div class="cp-config-row">
+      <div class="prov-toggle">
+        <button class="prov-btn on" id="prov-openai" onclick="setProvider('openai')">OpenAI</button>
+        <button class="prov-btn" id="prov-gemini" onclick="setProvider('gemini')">Gemini</button>
+      </div>
+      <select id="cp-model">
+        <optgroup label="GPT-4o" id="oai-grp">
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4-turbo">gpt-4-turbo</option>
+        </optgroup>
+        <optgroup label="Gemini 2.5" id="gem-grp-25" style="display:none">
+          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+        </optgroup>
+        <optgroup label="Gemini 2.0" id="gem-grp-20" style="display:none">
+          <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="cp-config-row">
+      <input type="password" id="cp-key" placeholder="sk-... or AIza..." autocomplete="off" oninput="onKeyInput()"/>
+    </div>
+    <div class="cp-config-row"><span class="cp-key-status" id="cp-key-status"></span></div>
+  </div>
+  <div id="cp-file-strip">
+    <button class="cp-file-btn" onclick="document.getElementById('cp-file-input').click()">📎 Attach JSON</button>
+    <span class="cp-file-name" id="cp-file-name">No file attached</span>
+    <span class="cp-file-clear" id="cp-file-clear" onclick="clearChatFile()" style="display:none">✕</span>
+    <input type="file" id="cp-file-input" accept=".json" onchange="handleChatFileAttach(event)"/>
+  </div>
+  <div id="cp-ctx-strip">
+    <span class="ctx-glow"></span>
+    <span class="ctx-lbl">Context</span>
+    <span class="ctx-text" id="cp-ctx-text"></span>
+    <span class="ctx-clear" onclick="clearCtx()">✕ clear</span>
+  </div>
+  <div class="cp-msgs" id="cp-msgs">
+    <div class="cp-empty" id="cp-empty">
+      <div class="cp-empty-icon">AI</div>
+      <p>Ask about any heuristic with a diagram, or upload a chain analysis JSON to get specific insights.</p>
+      <p style="margin-top:6px;font-size:10px;color:var(--faint)">Try: <em>"explain CIOH with diagram"</em>, <em>"what is dust detection?"</em>, <em>"show wallet fingerprinting"</em></p>
+    </div>
+  </div>
+  <div class="cp-prompts">
+    <button class="qp-btn" onclick="qp('Explain CIOH heuristic with a diagram')">CIOH</button>
+    <button class="qp-btn" onclick="qp('Explain change detection with diagram')">Change</button>
+    <button class="qp-btn" onclick="qp('Show CoinJoin detection diagram')">CoinJoin</button>
+    <button class="qp-btn" onclick="qp('What is peeling chain? Show diagram')">Peeling</button>
+    <button class="qp-btn" onclick="qp('Explain consolidation detection')">Consolidation</button>
+    <button class="qp-btn" onclick="qp('What is batch payment detection?')">Batch</button>
+    <button class="qp-btn" onclick="qp('What is dust detection? Show diagram')">Dust</button>
+    <button class="qp-btn" onclick="qp('Explain wallet fingerprinting with diagram')">Fingerprint</button>
+    <button class="qp-btn" onclick="qp('What is fee pattern analysis?')">Fee Pattern</button>
+    <button class="qp-btn" onclick="qp('Explain output position analysis')">Output Pos</button>
+    <button class="qp-btn" onclick="qp('What is address freshness detection?')">Freshness</button>
+    <button class="qp-btn" onclick="qp('Explain address reuse with diagram')">Addr Reuse</button>
+    <button class="qp-btn" onclick="qp('Explain the blk.dat file format with diagram')">blk.dat</button>
+    <button class="qp-btn" onclick="qp('Show the parsing pipeline diagram')">Pipeline</button>
+    <button class="qp-btn" onclick="qp('Explain varint encoding with diagram')">Varint</button>
+    <button class="qp-btn" onclick="qp('How does xor.dat obfuscation work?')">XOR decode</button>
+    <button class="qp-btn" onclick="qp('How is TXID computed for segwit vs legacy?')">TXID calc</button>
+    <button class="qp-btn" id="qp-ctx-1" style="display:none" onclick="qp('Summarise the block analysis results')">Summarise</button>
+    <button class="qp-btn" id="qp-ctx-2" style="display:none" onclick="qp('Which heuristics fired most and what do they mean?')">Top heuristics</button>
+    <button class="qp-btn" id="qp-ctx-3" style="display:none" onclick="qp('Show the most interesting flagged transactions')">Notable txs</button>
+    <button class="qp-btn" id="qp-ctx-4" style="display:none" onclick="qp('Give a privacy analysis — which wallets have poor privacy?')">Privacy report</button>
+    <button class="qp-btn" id="qp-ctx-5" style="display:none" onclick="qp('Are there CoinJoins or consolidations? Explain what they reveal')">CoinJoin/Consol</button>
+  </div>
+  <div class="cp-input-row">
+    <textarea class="cp-input" id="cp-input" placeholder="Ask about heuristics, diagrams, or your block data…" rows="1" onkeydown="chatKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="cp-send" id="cp-send" onclick="sendChat()" disabled>➤</button>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════
+let currentData=null, currentBlock=0, filteredTxs=[], currentPage=0;
+const PAGE_SIZE=50;
+const CLS_COLORS={coinjoin:'#a78bfa',consolidation:'#ff9940',batch_payment:'#00d4ff',self_transfer:'#00ff9d',simple_payment:'#40e8ff',unknown:'#3a6b99'};
+let chatOpen=false, configOpen=true, aiProvider='openai', chatHistory=[], chatBusy=false, streamAbort=null;
+let chatAttachedFile=null, chatAttachedContent=null;
+
+// ════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════
+async function init(){
+  try{
+    const r=await fetch('/api/blocks');
+    const d=await r.json();
+    renderFileList(d.blocks||[]);
+    document.getElementById('hdr-status').textContent=`${d.blocks?.length||0} FILES`;
+  }catch(e){
+    document.getElementById('file-list').innerHTML=`<div style="color:var(--red);font-size:10px;font-family:var(--ff-mono)">API error</div>`;
+    document.getElementById('hdr-status').textContent='ERROR';
+  }
+}
+
+function renderFileList(blocks){
+  const el=document.getElementById('file-list');
+  if(!blocks.length){
+    el.innerHTML='<div style="color:var(--muted);font-size:10px;font-family:var(--ff-mono)">No files yet.<br/>Upload below.</div>';
+    return;
+  }
+  el.innerHTML=blocks.map(b=>`
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+      <div class="file-item" onclick="loadBlock('${b.stem}')" id="fi-${b.stem}" style="flex:1;margin-bottom:0">
+        <div class="file-name">${b.file}</div>
+        <div class="file-meta">${b.block_count} block${b.block_count!==1?'s':''} · ${fmtN(b.total_txs)} txs · ${fmtN(b.flagged)} flagged</div>
+      </div>
+      <button title="Chat about this block" onclick="chatAboutBlock('${b.stem}')"
+        style="flex-shrink:0;width:28px;height:40px;background:rgba(0,212,255,.07);border:1px solid var(--wire);border-radius:var(--r2);color:var(--cyan);cursor:pointer;font-size:13px;transition:all .15s;display:flex;align-items:center;justify-content:center"
+        onmouseover="this.style.background='rgba(0,212,255,.18)'" onmouseout="this.style.background='rgba(0,212,255,.07)'">💬</button>
+    </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════
+// UPLOAD & ANALYZE
+// ════════════════════════════════════════════════════
+async function uploadAndAnalyze(){
+  const blk=document.getElementById('uf-blk').files[0];
+  const rev=document.getElementById('uf-rev').files[0];
+  const xor=document.getElementById('uf-xor').files[0];
+  const err=document.getElementById('upload-err');
+  const prog=document.getElementById('upload-progress');
+  err.textContent='';
+  if(!blk||!rev||!xor){err.textContent='Select all 3 files first.';return;}
+  prog.style.display='block'; prog.textContent='Uploading & analyzing…';
+  const fd=new FormData();
+  fd.append('blk_file',blk); fd.append('rev_file',rev); fd.append('xor_file',xor);
+  try{
+    const resp=await fetch('/api/analyze/block',{method:'POST',body:fd});
+    // Always parse as text first, then try JSON — prevents "Unexpected token '<'" masking real error
+    const raw=await resp.text();
+    let data;
+    try{ data=JSON.parse(raw); }
+    catch(parseErr){
+      prog.style.display='none';
+      err.textContent='Server error (non-JSON response). Check that web.py is running and files are valid blk/rev/xor.dat format.';
+      console.error('Raw server response:', raw.slice(0,500));
+      return;
+    }
+    prog.style.display='none';
+    if(!data.ok){
+      err.textContent=data.error?.message||'Analysis failed';
+      return;
+    }
+    // Strip any directory path from filename (Windows compatibility)
+    const rawName=blk.name.split(/[\\/]/).pop();
+    const stem=rawName.replace(/\.dat$/i,'');
+    await init();
+    await loadBlock(stem);
+  }catch(e){
+    prog.style.display='none';
+    err.textContent='Error: '+e.message;
+  }
+}
+
+// ════════════════════════════════════════════════════
+// LOAD PRE-ANALYZED BLOCK
+// ════════════════════════════════════════════════════
+async function loadBlock(stem){
+  document.querySelectorAll('.file-item').forEach(el=>el.classList.remove('active'));
+  const fi=document.getElementById('fi-'+stem);
+  if(fi)fi.classList.add('active');
+  showPage('block');
+  document.getElementById('block-content').innerHTML=`<div class="spinner-wrap"><div class="spinner"></div><div class="spinner-label">Loading analysis…</div></div>`;
+  try{
+    const resp=await fetch('/api/blocks/'+stem);
+    currentData=await resp.json();
+    currentBlock=0;
+    renderBlockView();
+  }catch(e){
+    document.getElementById('block-content').innerHTML=`<div style="background:rgba(255,77,106,.04);border:1px solid rgba(255,77,106,.2);border-radius:8px;padding:20px"><div style="color:var(--red);font-family:var(--ff-mono);font-weight:600">LOAD ERROR</div><div style="color:var(--muted);margin-top:6px">${e.message}</div></div>`;
+  }
+}
+
+// ════════════════════════════════════════════════════
+// CHAT ABOUT BLOCK
+// ════════════════════════════════════════════════════
+async function chatAboutBlock(stem){
+  try{
+    const resp=await fetch('/api/blocks/'+stem);
+    const data=await resp.json();
+    if(!data.ok){if(!chatOpen)toggleChat();appendErrMsg('Could not load '+stem);return;}
+    const s=data.analysis_summary||{},fs=s.fee_rate_stats||{},blocks=data.blocks||[];
+    const hCounts={};
+    for(const b of blocks)for(const tx of b.transactions||[])for(const[hid,res]of Object.entries(tx.heuristics||{})){if(res.detected)hCounts[hid]=(hCounts[hid]||0)+1;}
+    const topH=Object.entries(hCounts).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>k+'='+v).join(', ');
+    const clsCounts={};
+    for(const b of blocks)for(const tx of b.transactions||[]){const c=tx.classification||'unknown';clsCounts[c]=(clsCounts[c]||0)+1;}
+    const clsS=Object.entries(clsCounts).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+'='+v).join(', ');
+    const notable=[];
+    for(const b of blocks)for(const tx of(b.transactions||[]).slice(0,500)){
+      if(['coinjoin','consolidation','batch_payment'].includes(tx.classification)&&notable.length<5){
+        const af=Object.entries(tx.heuristics||{}).filter(([,v])=>v.detected).map(([k])=>k);
+        notable.push('  txid='+tx.txid.slice(0,16)+'... cls='+tx.classification+' flags=['+af.join(',')+']');
+      }
+    }
+    chatAttachedContent={_type:'block_analysis',stem,file:data.file,block_count:data.block_count,
+      analysis_summary:s,heuristic_fire_counts:hCounts,classification_breakdown:clsCounts,
+      notable_transactions:notable,
+      blocks_brief:blocks.map(b=>({block_hash:b.block_hash,block_height:b.block_height,
+        tx_count:b.tx_count,flagged:b.analysis_summary?.flagged_transactions||0,
+        fee_stats:b.analysis_summary?.fee_rate_stats||{},script_dist:b.analysis_summary?.script_type_distribution||{}}))};
+    chatAttachedFile={name:data.file};
+    document.getElementById('cp-ctx-text').textContent=data.file+' · '+data.block_count+' block(s) · '+fmtN(s.total_transactions_analyzed)+' txs · '+fmtN(s.flagged_transactions)+' flagged';
+    document.getElementById('cp-ctx-strip').classList.add('on');
+    document.getElementById('cp-ctx-pill').textContent='BLOCK LOADED';
+    document.getElementById('cp-ctx-pill').classList.add('on');
+    ['qp-ctx-1','qp-ctx-2','qp-ctx-3','qp-ctx-4','qp-ctx-5'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
+    if(!chatOpen)toggleChat();
+    const empty=document.getElementById('cp-empty');if(empty)empty.remove();
+    appendMsg('ai','**Block loaded: '+data.file+'**\n\n'
+      +'I now have the full analysis. **'+fmtN(s.total_transactions_analyzed)+' transactions**, **'+fmtN(s.flagged_transactions)+' flagged**.\n\n'
+      +'Top heuristics: '+(topH||'none')+'\nClassifications: '+(clsS||'none')+'\n\n'
+      +'Ask me anything — heuristic explanations with diagrams, why transactions were flagged, privacy analysis, file format questions.');
+  }catch(e){if(!chatOpen)toggleChat();appendErrMsg('Failed to load block: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════
+// RENDER BLOCK VIEW
+// ════════════════════════════════════════════════════
+function renderBlockView(){
+  if(!currentData||!currentData.ok){document.getElementById('block-content').innerHTML=`<div style="color:var(--red);padding:20px">Error loading data</div>`;return;}
+  const blocks=currentData.blocks||[];
+  const summary=currentData.analysis_summary||{};
+  const feeStats=summary.fee_rate_stats||{};
+  const scriptDist=summary.script_type_distribution||{};
+  let html='';
+  html+=`<div class="stats-row">
+    <div class="stat-card"><div class="stat-lbl">Total Transactions</div><div class="stat-val cyan">${fmtN(summary.total_transactions_analyzed||0)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Flagged</div><div class="stat-val red">${fmtN(summary.flagged_transactions||0)}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Blocks</div><div class="stat-val">${currentData.block_count||0}</div></div>
+    <div class="stat-card"><div class="stat-lbl">Median Fee</div><div class="stat-val amber">${feeStats.median_sat_vb||0}<span class="stat-unit">sat/vB</span></div></div>
+    <div class="stat-card"><div class="stat-lbl">Mean Fee</div><div class="stat-val">${feeStats.mean_sat_vb||0}<span class="stat-unit">sat/vB</span></div></div>
+    <div class="stat-card"><div class="stat-lbl">Max Fee</div><div class="stat-val violet">${feeStats.max_sat_vb||0}<span class="stat-unit">sat/vB</span></div></div>
+  </div>`;
+  if(blocks.length>1){
+    html+=`<div class="block-tabs">`+blocks.map((b,i)=>`<div class="block-tab ${i===currentBlock?'active':''}" onclick="selectBlock(${i})">Block ${i+1}: Height ${b.block_height}</div>`).join('')+`</div>`;
+  }
+  const block=blocks[currentBlock];
+  if(block) html+=renderBlockSection(block,scriptDist);
+  document.getElementById('block-content').innerHTML=html;
+  drawScriptChart(scriptDist);
+  applyFilters();
+}
+
+function selectBlock(idx){currentBlock=idx;renderBlockView();}
+
+function renderBlockSection(block,fileScriptDist){
+  const bsum=block.analysis_summary||{};
+  const bfee=bsum.fee_rate_stats||{};
+  const bscript=bsum.script_type_distribution||{};
+  const txs=block.transactions||[];
+  const heuristics=bsum.heuristics_applied||[];
+  let html='';
+
+  // Block info
+  html+=`<div class="section">
+    <div class="section-hdr open" onclick="toggleSection(this)">
+      <span class="section-ico">⬡</span>
+      <h3>Block ${block.block_height} — ${block.block_hash?.slice(0,16)}…</h3>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body open">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div><table style="width:100%;font-size:11px">
+          <tr><td style="color:var(--muted);padding:4px 0;width:110px">Block Hash</td><td style="font-family:var(--ff-mono);font-size:8px;color:var(--cyan);word-break:break-all">${block.block_hash}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 0">Height</td><td style="font-family:var(--ff-mono)">${block.block_height}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 0">Timestamp</td><td>${block.timestamp?new Date(block.timestamp*1000).toISOString().replace('T',' ').slice(0,19)+' UTC':'?'}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 0">Transactions</td><td style="font-family:var(--ff-mono)">${fmtN(block.tx_count)}</td></tr>
+          <tr><td style="color:var(--muted);padding:4px 0">Flagged Txs</td><td style="color:var(--red);font-family:var(--ff-mono)">${fmtN(bsum.flagged_transactions||0)}</td></tr>
+        </table></div>
+        <div>
+          <div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:8px">FEE RATE (sat/vB)</div>
+          <div class="stats-row" style="gap:8px">
+            <div class="stat-card" style="min-width:65px"><div class="stat-lbl">Min</div><div class="stat-val" style="font-size:16px">${bfee.min_sat_vb||0}</div></div>
+            <div class="stat-card" style="min-width:65px"><div class="stat-lbl">Med</div><div class="stat-val amber" style="font-size:16px">${bfee.median_sat_vb||0}</div></div>
+            <div class="stat-card" style="min-width:65px"><div class="stat-lbl">Mean</div><div class="stat-val" style="font-size:16px">${bfee.mean_sat_vb||0}</div></div>
+            <div class="stat-card" style="min-width:65px"><div class="stat-lbl">Max</div><div class="stat-val red" style="font-size:16px">${bfee.max_sat_vb||0}</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // Heuristic summary + classification
+  const hCounts={};
+  for(const h of heuristics) hCounts[h]=txs.filter(tx=>tx.heuristics?.[h]?.detected).length;
+  const clsCounts={};
+  for(const tx of txs) clsCounts[tx.classification||'unknown']=(clsCounts[tx.classification||'unknown']||0)+1;
+
+  html+=`<div class="section">
+    <div class="section-hdr open" onclick="toggleSection(this)">
+      <span class="section-ico">🔍</span>
+      <h3>Heuristic Analysis — ${heuristics.length} Applied</h3>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body open">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:8px">HEURISTIC FIRE RATE</div>
+          <table class="htable">
+            <thead><tr><th>Heuristic</th><th>Detected</th><th>Rate</th></tr></thead>
+            <tbody>`;
+  for(const[h,cnt] of Object.entries(hCounts).sort((a,b)=>b[1]-a[1])){
+    const pct=block.tx_count>0?(cnt/block.tx_count*100).toFixed(1):'0';
+    html+=`<tr>
+      <td><span style="font-family:var(--ff-mono);font-size:9px;color:${cnt>0?'var(--cyan)':'var(--muted)'}">${h}</span></td>
+      <td style="font-family:var(--ff-mono);font-size:11px;color:${cnt>0?'var(--text-bright)':'var(--muted)'}">${fmtN(cnt)}</td>
+      <td><div style="display:flex;align-items:center;gap:6px">
+        <div style="width:70px;height:5px;background:var(--faint);border-radius:2px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${cnt>0?'var(--cyan)':'var(--faint)'};border-radius:2px"></div>
+        </div>
+        <span style="font-family:var(--ff-mono);font-size:9px;color:var(--muted)">${pct}%</span>
+      </div></td>
+    </tr>`;
+  }
+  html+=`</tbody></table></div>
+        <div>
+          <div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:8px">CLASSIFICATION BREAKDOWN</div>
+          <div class="cls-grid">`;
+  for(const[cls,cnt] of Object.entries(clsCounts).sort((a,b)=>b[1]-a[1])){
+    const pct=block.tx_count>0?(cnt/block.tx_count*100).toFixed(1):'0';
+    html+=`<div class="cls-item">
+      <div class="cls-name" style="color:${CLS_COLORS[cls]||'#3a6b99'}">${cls.replace(/_/g,' ')}</div>
+      <div class="cls-count">${fmtN(cnt)}</div>
+      <div class="cls-pct">${pct}%</div>
+    </div>`;
+  }
+  html+=`</div></div></div></div></div>`;
+
+  // Script type distribution
+  html+=`<div class="section">
+    <div class="section-hdr" onclick="toggleSection(this)">
+      <span class="section-ico">📊</span>
+      <h3>Script Type Distribution</h3>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body"><div id="script-chart"></div></div>
+  </div>`;
+
+  // Transaction list
+  html+=`<div class="section">
+    <div class="section-hdr open" onclick="toggleSection(this)">
+      <span class="section-ico">📋</span>
+      <h3>Transactions <span style="color:var(--muted);font-weight:400" id="tx-count-label">(${fmtN(txs.length)})</span></h3>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="section-body open">
+      <div style="display:grid;grid-template-columns:160px 1fr 110px 100px 80px;gap:10px;padding:0 0 8px;font-family:var(--ff-mono);font-size:8px;color:var(--muted)">
+        <span>TXID</span><span></span><span>CLASSIFICATION</span><span>FLAGS</span><span>FEE RATE</span>
+      </div>
+      <div id="tx-list-container"></div>
+      <div id="tx-pagination" class="pagination"></div>
+    </div>
+  </div>`;
+
+  return html;
+}
+
+// ════════════════════════════════════════════════════
+// SCRIPT CHART
+// ════════════════════════════════════════════════════
+function drawScriptChart(scriptDist){
+  const el=document.getElementById('script-chart');
+  if(!el)return;
+  const total=Object.values(scriptDist).reduce((a,b)=>a+b,0)||1;
+  const typeColors={p2pkh:'#00d4ff',p2sh:'#a78bfa',p2wpkh:'#00ff9d',p2wsh:'#00cc7a',p2tr:'#40e8ff',op_return:'#3a6b99',unknown:'#ff4d6a'};
+  el.innerHTML=Object.entries(scriptDist).sort((a,b)=>b[1]-a[1]).map(([type,cnt])=>{
+    const pct=(cnt/total*100).toFixed(1);
+    const color=typeColors[type]||'#3a6b99';
+    return`<div class="bar-row">
+      <div class="bar-label" style="color:${color}">${type}</div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${color};opacity:.7"></div></div>
+      <div class="bar-val">${fmtN(cnt)} <span style="color:var(--muted)">(${pct}%)</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════════════
+// FILTERS + TX LIST
+// ════════════════════════════════════════════════════
+function applyFilters(){
+  if(!currentData)return;
+  const block=currentData.blocks?.[currentBlock];
+  if(!block)return;
+  const clsF=document.getElementById('filter-cls')?.value||'';
+  const hF=document.getElementById('filter-heuristic')?.value||'';
+  const search=document.getElementById('filter-search')?.value?.toLowerCase()||'';
+  const flagged=document.getElementById('filter-flagged')?.value||'';
+  const txs=block.transactions||[];
+  filteredTxs=txs.filter(tx=>{
+    if(clsF&&tx.classification!==clsF)return false;
+    if(hF&&!tx.heuristics?.[hF]?.detected)return false;
+    if(search&&!tx.txid.includes(search))return false;
+    if(flagged==='yes'&&!Object.values(tx.heuristics||{}).some(h=>h.detected))return false;
+    if(flagged==='no'&&Object.values(tx.heuristics||{}).some(h=>h.detected))return false;
+    return true;
+  });
+  currentPage=0;
+  renderTxList();
+  const lbl=document.getElementById('tx-count-label');
+  if(lbl)lbl.textContent=`(${fmtN(filteredTxs.length)} / ${fmtN(txs.length)})`;
+}
+
+function renderTxList(){
+  const container=document.getElementById('tx-list-container');
+  const pag=document.getElementById('tx-pagination');
+  if(!container)return;
+  const start=currentPage*PAGE_SIZE;
+  const page=filteredTxs.slice(start,start+PAGE_SIZE);
+  const totalPages=Math.ceil(filteredTxs.length/PAGE_SIZE);
+  if(!page.length){
+    container.innerHTML='<div style="color:var(--muted);padding:20px;text-align:center;font-family:var(--ff-mono);font-size:10px">No transactions match filters</div>';
+    if(pag)pag.innerHTML='';return;
+  }
+  container.innerHTML=page.map((tx,li)=>{
+    const gi=start+li;
+    const flags=Object.entries(tx.heuristics||{}).filter(([,v])=>v.detected).map(([k])=>k.replace('_detection','').replace('_payment','').replace('_number','').replace('_fingerprint','fp').replace('_freshness','fresh').replace('_position','pos').replace('_pattern','pat').replace('_reuse','reuse'));
+    const flagsHtml=flags.length
+      ?`<div class="flag-row">${flags.slice(0,3).map(f=>`<span class="flag on">${f}</span>`).join('')}${flags.length>3?`<span class="flag on">+${flags.length-3}</span>`:''}</div>`
+      :`<span style="color:var(--faint);font-family:var(--ff-mono);font-size:8px">—</span>`;
+    const shortTx=tx.txid?tx.txid.slice(0,12)+'…'+tx.txid.slice(-8):'?';
+    const cls=tx.classification||'unknown';
+    const did=`txd-${gi}`;
+    // Safely encode tx data
+    const txJson=JSON.stringify(tx).replace(/\\/g,'\\\\').replace(/"/g,'&quot;');
+    return`<div class="tx-item" onclick="toggleTxDetail('${did}','${tx.txid}','${txJson}')">
+      <div class="tx-id"><span style="font-size:8px;color:var(--muted)">#${gi}</span> <span>${shortTx}</span></div>
+      <div style="flex:1"></div>
+      <div style="width:110px"><span class="pill pill-${cls}">${cls.replace(/_/g,' ')}</span></div>
+      <div style="width:100px">${flagsHtml}</div>
+      <div style="width:80px;font-family:var(--ff-mono);font-size:10px;color:var(--muted)">${tx._feeRate||'—'}</div>
+    </div>
+    <div class="tx-detail-expand" id="${did}"></div>`;
+  }).join('');
+  if(pag){
+    pag.innerHTML=`
+      <button class="pg-btn" onclick="goPage(${currentPage-1})" ${currentPage===0?'disabled':''}>← Prev</button>
+      <span class="pg-info">Page ${currentPage+1} / ${totalPages} (${fmtN(filteredTxs.length)} txs)</span>
+      <button class="pg-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages-1?'disabled':''}>Next →</button>`;
+  }
+}
+
+function goPage(n){
+  const total=Math.ceil(filteredTxs.length/PAGE_SIZE);
+  currentPage=Math.max(0,Math.min(n,total-1));
+  renderTxList();
+  document.getElementById('tx-list-container')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function toggleTxDetail(detailId,txid,txDataStr){
+  const el=document.getElementById(detailId);
+  if(!el)return;
+  if(el.classList.contains('open')){el.classList.remove('open');return;}
+  let tx;
+  try{tx=JSON.parse(txDataStr.replace(/&quot;/g,'"'));}catch(e){return;}
+  el.innerHTML=renderTxDetail(tx);
+  el.classList.add('open');
+}
+
+function renderTxDetail(tx){
+  const heuristics=tx.heuristics||{};
+  const cls=tx.classification||'unknown';
+  let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">`;
+  // Heuristics table with all 15
+  html+=`<div>
+    <div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:8px">HEURISTIC RESULTS (${Object.keys(heuristics).length})</div>
+    <table class="htable"><thead><tr><th>Heuristic</th><th>Status</th><th>Details</th></tr></thead><tbody>`;
+  for(const[hid,result] of Object.entries(heuristics)){
+    const det=result.detected;
+    const conf=result.confidence||'';
+    let details='';
+    if(det){
+      if(hid==='cioh') details=`${result.input_count} inputs${result.mixed_input_types?', mixed':''}`;
+      else if(hid==='change_detection') details=`idx ${result.likely_change_index}, ${result.method}${conf?', '+conf:''}`;
+      else if(hid==='coinjoin') details=`${result.equal_value_output_count} equal @ ${fmtN(result.equal_value_sats)} sats`;
+      else if(hid==='consolidation') details=`${result.input_count}→${result.output_count}${result.same_input_type?' same type':''}`;
+      else if(hid==='self_transfer') details=`types: ${(result.input_types||[]).join(',')}`;
+      else if(hid==='round_number_payment') details=`${result.count} round output(s)`;
+      else if(hid==='op_return') details=(result.op_return_outputs||[]).map(o=>o.protocol).join(', ')||'detected';
+      else if(hid==='address_reuse') details=`intra=${result.intra_tx_reuse_count}, block=${result.block_reuse_count}`;
+      else if(hid==='peeling_chain') details=`ratio ${result.value_ratio}×, continues=${result.chain_continues}`;
+      else if(hid==='batch_payment') details=`${result.input_count}in→${result.output_count}out${result.homogeneous_outputs?' homo':''}`;
+      else if(hid==='dust_detection') details=`${result.count} dust output(s)${result.possible_dust_attack?' ⚠attack':''}`;
+      else if(hid==='output_position') details=`bip69=${result.bip69_ordering}, change@0=${result.change_at_index_zero}`;
+      else if(hid==='address_freshness') details=`${result.fresh_output_count} fresh, ${result.reused_output_count} reused [${result.privacy_score}]`;
+      else if(hid==='fee_pattern') details=(result.flags||[]).join(', ');
+      else if(hid==='wallet_fingerprint') details=(result.signals||[]).slice(0,2).join(', ');
+      if(conf&&!details.includes(conf)) details+=(details?' ':'')+`[${conf}]`;
+    }
+    html+=`<tr>
+      <td><span style="font-family:var(--ff-mono);font-size:8px;color:${det?'var(--cyan)':'var(--muted)'}">${hid}</span></td>
+      <td><span class="pill ${det?'pill-detected':'pill-not-detected'}">${det?'✓ YES':'— NO'}</span></td>
+      <td style="font-size:10px;color:var(--muted);max-width:200px">${details}</td>
+    </tr>`;
+  }
+  html+=`</tbody></table></div>`;
+  // TX Info
+  const activeFlags=Object.entries(heuristics).filter(([,v])=>v.detected).map(([k])=>k);
+  html+=`<div>
+    <div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:8px">TRANSACTION INFO</div>
+    <table style="width:100%;font-size:10px">
+      <tr><td style="color:var(--muted);padding:3px 0;width:90px">TXID</td><td style="font-family:var(--ff-mono);font-size:8px;color:var(--cyan);word-break:break-all">${tx.txid}</td></tr>
+      <tr><td style="color:var(--muted);padding:3px 0">Class</td><td><span class="pill pill-${cls}">${cls.replace(/_/g,' ')}</span></td></tr>
+    </table>
+    <div style="margin-top:12px;font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">ACTIVE FLAGS (${activeFlags.length})</div>
+    <div class="flag-row">
+      ${activeFlags.length
+        ?activeFlags.map(f=>`<span class="flag on">${f}</span>`).join('')
+        :'<span style="color:var(--muted);font-size:10px">None</span>'}
+    </div>
+  </div></div>`;
+  return html;
+}
+
+// ════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════
+function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+id)?.classList.add('active');}
+function toggleSection(hdr){hdr.classList.toggle('open');hdr.nextElementSibling?.classList.toggle('open');}
+function fmtN(n){return Number(n||0).toLocaleString();}
+
+// ════════════════════════════════════════════════════
+// SVG DIAGRAMS (all 12 heuristics with diagrams)
+// ════════════════════════════════════════════════════
+const DIAGRAMS={
+cioh:`<svg viewBox="0 0 500 188" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="16" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">COMMON INPUT OWNERSHIP (CIOH)</text>
+<defs><marker id="a1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.6)"/></marker></defs>
+<rect x="8" y="28" width="120" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="68" y="41" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">P2WPKH Input A</text><text x="68" y="52" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">50,000 sats</text>
+<rect x="8" y="64" width="120" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="68" y="77" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">P2WPKH Input B</text><text x="68" y="88" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">30,000 sats</text>
+<rect x="8" y="100" width="120" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="68" y="113" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">P2WPKH Input C</text><text x="68" y="124" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">20,000 sats</text>
+<path d="M128,42 L188,93" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a1)"/>
+<path d="M128,78 L188,93" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a1)"/>
+<path d="M128,114 L188,93" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a1)"/>
+<circle cx="208" cy="93" r="18" fill="#071428" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/><text x="208" y="97" text-anchor="middle" font-family="monospace" font-size="9" fill="#00d4ff">TX</text>
+<path d="M226,93 L290,93" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a1)"/>
+<rect x="290" y="76" width="130" height="34" rx="3" fill="#071428" stroke="#163666"/><text x="355" y="91" text-anchor="middle" font-family="monospace" font-size="8" fill="#40e8ff">P2TR Output</text><text x="355" y="103" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">98,500 sats</text>
+<rect x="8" y="148" width="185" height="14" rx="2" fill="rgba(0,255,157,.07)" stroke="rgba(0,255,157,.2)"/><text x="100" y="158" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">ASSUMPTION: same wallet</text>
+<rect x="200" y="148" width="185" height="14" rx="2" fill="rgba(255,77,106,.07)" stroke="rgba(255,77,106,.2)"/><text x="292" y="158" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">BROKEN BY: CoinJoin</text>
+<text x="250" y="178" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Confidence: HIGH (same types) · MEDIUM (mixed types) · skip coinbase</text>
+</svg>`,
+
+change_detection:`<svg viewBox="0 0 500 215" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="16" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">CHANGE DETECTION — 3 METHODS</text>
+<defs><marker id="a2" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.5)"/></marker></defs>
+<rect x="8" y="68" width="120" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="68" y="81" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">P2WPKH Input</text><text x="68" y="92" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">110,000 sats</text>
+<path d="M128,82 L188,93" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+<circle cx="206" cy="93" r="16" fill="#071428" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/><text x="206" y="97" text-anchor="middle" font-family="monospace" font-size="9" fill="#00d4ff">TX</text>
+<path d="M222,85 L284,56" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+<path d="M222,101 L284,130" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a2)"/>
+<rect x="284" y="40" width="205" height="30" rx="3" fill="rgba(255,153,64,.07)" stroke="rgba(255,153,64,.3)"/><text x="386" y="54" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff9940">P2TR — 100,000 sats → PAYMENT</text><text x="386" y="64" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">✓ ROUND · ✗ type mismatch</text>
+<rect x="284" y="116" width="205" height="30" rx="3" fill="rgba(0,255,157,.07)" stroke="rgba(0,255,157,.3)"/><text x="386" y="130" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">P2WPKH — 9,350 sats → CHANGE</text><text x="386" y="140" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">✓ matches input · ✓ non-round</text>
+<text x="250" y="164" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">Method priority:</text>
+<rect x="55" y="170" width="110" height="14" rx="2" fill="rgba(0,255,157,.08)" stroke="rgba(0,255,157,.25)"/><text x="110" y="180" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">1. script_type_match</text>
+<rect x="175" y="170" width="90" height="14" rx="2" fill="rgba(255,153,64,.08)" stroke="rgba(255,153,64,.25)"/><text x="220" y="180" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">2. round_number</text>
+<rect x="275" y="170" width="90" height="14" rx="2" fill="rgba(58,107,153,.15)" stroke="rgba(58,107,153,.3)"/><text x="320" y="180" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">3. value_analysis</text>
+<text x="250" y="200" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">HIGH = script+round agree · MEDIUM = one signal · LOW = value only</text>
+</svg>`,
+
+coinjoin:`<svg viewBox="0 0 520 222" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="260" y="16" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">COINJOIN DETECTION</text>
+<defs><marker id="a3" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.5)"/></marker></defs>
+<rect x="5" y="26" width="112" height="24" rx="3" fill="#071428" stroke="#163666"/><text x="61" y="38" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">Alice P2WPKH 120k</text>
+<rect x="5" y="58" width="112" height="24" rx="3" fill="#071428" stroke="#163666"/><text x="61" y="70" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">Bob P2TR 120k</text>
+<rect x="5" y="90" width="112" height="24" rx="3" fill="#071428" stroke="#163666"/><text x="61" y="102" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">Carol P2WPKH 120k</text>
+<rect x="5" y="122" width="112" height="24" rx="3" fill="#071428" stroke="#163666"/><text x="61" y="134" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">Dave P2WPKH 120k</text>
+<path d="M117,38 L185,96" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<path d="M117,70 L185,96" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<path d="M117,102 L185,96" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<path d="M117,134 L185,96" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<circle cx="205" cy="96" r="18" fill="#071428" stroke="rgba(167,139,250,.6)" stroke-width="2"/><text x="205" y="100" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">CJ TX</text>
+<path d="M223,88 L288,52" stroke="rgba(167,139,250,.4)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<path d="M223,93 L288,84" stroke="rgba(167,139,250,.4)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<path d="M223,99 L288,116" stroke="rgba(167,139,250,.4)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<path d="M223,104 L288,148" stroke="rgba(167,139,250,.4)" stroke-width="1.5" fill="none" marker-end="url(#a3)"/>
+<rect x="288" y="38" width="228" height="22" rx="3" fill="rgba(167,139,250,.08)" stroke="rgba(167,139,250,.3)"/><text x="402" y="53" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">100,000 sats ← EQUAL (unknown owner)</text>
+<rect x="288" y="68" width="228" height="22" rx="3" fill="rgba(167,139,250,.08)" stroke="rgba(167,139,250,.3)"/><text x="402" y="83" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">100,000 sats ← EQUAL (unknown owner)</text>
+<rect x="288" y="98" width="228" height="22" rx="3" fill="rgba(167,139,250,.08)" stroke="rgba(167,139,250,.3)"/><text x="402" y="113" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">100,000 sats ← EQUAL (unknown owner)</text>
+<rect x="288" y="130" width="228" height="22" rx="3" fill="#071428" stroke="#163666"/><text x="402" y="145" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">15,800 sats (fees/change)</text>
+<rect x="5" y="168" width="510" height="24" rx="4" fill="rgba(167,139,250,.04)" stroke="rgba(167,139,250,.15)"/>
+<text x="260" y="179" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">Signals: ≥3 in · ≥3 out · ≥2 equal-value outputs · equal_ratio ≥ 30%</text>
+<text x="260" y="190" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">Mixed input types (P2WPKH+P2TR) → HIGH · same types → MEDIUM</text>
+<text x="260" y="210" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">False positives: batch payments with equal outputs · JoinMarket harder to detect</text>
+</svg>`,
+
+peeling_chain:`<svg viewBox="0 0 560 148" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="280" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">PEELING CHAIN DETECTION</text>
+<defs><marker id="a4" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.6)"/></marker></defs>
+<rect x="5" y="48" width="82" height="28" rx="3" fill="#071428" stroke="rgba(0,212,255,.4)"/><text x="46" y="61" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">Input</text><text x="46" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">1,000,000</text>
+<path d="M87,62 L124,62" stroke="rgba(0,212,255,.5)" stroke-width="2" fill="none" marker-end="url(#a4)"/>
+<circle cx="143" cy="62" r="16" fill="#071428" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/><text x="143" y="66" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">TX1</text>
+<path d="M159,54 L196,37" stroke="rgba(255,153,64,.5)" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+<path d="M159,70 L196,90" stroke="rgba(0,212,255,.5)" stroke-width="2.5" fill="none" marker-end="url(#a4)"/>
+<rect x="196" y="24" width="100" height="22" rx="3" fill="rgba(255,153,64,.07)" stroke="rgba(255,153,64,.3)"/><text x="246" y="35" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">10,000 sats payment</text><text x="246" y="43" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">← small (×100 less)</text>
+<rect x="196" y="78" width="100" height="22" rx="3" fill="rgba(0,212,255,.07)" stroke="rgba(0,212,255,.3)"/><text x="246" y="89" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">989,400 change</text><text x="246" y="99" text-anchor="middle" font-family="monospace" font-size="6" fill="#00d4ff">← large → continues</text>
+<path d="M296,89 L330,89" stroke="rgba(0,212,255,.5)" stroke-width="2" stroke-dasharray="4,3" fill="none" marker-end="url(#a4)"/>
+<circle cx="349" cy="89" r="16" fill="#071428" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/><text x="349" y="93" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">TX2</text>
+<path d="M365,81 L392,66" stroke="rgba(255,153,64,.5)" stroke-width="1.5" fill="none" marker-end="url(#a4)"/>
+<path d="M365,97 L392,112" stroke="rgba(0,212,255,.5)" stroke-width="2" stroke-dasharray="4,3" fill="none" marker-end="url(#a4)"/>
+<text x="406" y="64" font-family="monospace" font-size="7" fill="#ff9940">payment</text>
+<text x="406" y="115" font-family="monospace" font-size="7" fill="#00d4ff">change→TX3…</text>
+<rect x="5" y="122" width="548" height="20" rx="3" fill="rgba(0,212,255,.03)" stroke="rgba(0,212,255,.1)"/>
+<text x="278" y="134" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Detect: 2 spendable outputs · ratio ≥ 5× · large output spent in same block → chain_continues=true → HIGH</text>
+</svg>`,
+
+consolidation:`<svg viewBox="0 0 480 180" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="240" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">CONSOLIDATION DETECTION</text>
+<defs><marker id="a5" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.5)"/></marker></defs>
+<rect x="5" y="24" width="108" height="20" rx="3" fill="#071428" stroke="#163666"/><text x="59" y="38" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">UTXO #1 — 10,000</text>
+<rect x="5" y="50" width="108" height="20" rx="3" fill="#071428" stroke="#163666"/><text x="59" y="64" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">UTXO #2 — 8,500</text>
+<rect x="5" y="76" width="108" height="20" rx="3" fill="#071428" stroke="#163666"/><text x="59" y="90" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">UTXO #3 — 12,000</text>
+<rect x="5" y="102" width="108" height="20" rx="3" fill="#071428" stroke="#163666"/><text x="59" y="116" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">UTXO #4 — 9,200</text>
+<rect x="5" y="128" width="108" height="20" rx="3" fill="#071428" stroke="#163666"/><text x="59" y="142" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">UTXO #5 — 7,800</text>
+<path d="M113,34 L185,89" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+<path d="M113,60 L185,89" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+<path d="M113,86 L185,89" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+<path d="M113,112 L185,89" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+<path d="M113,138 L185,89" stroke="rgba(0,212,255,.35)" stroke-width="1.5" fill="none" marker-end="url(#a5)"/>
+<circle cx="205" cy="89" r="18" fill="#071428" stroke="rgba(255,153,64,.5)" stroke-width="2"/><text x="205" y="86" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">CONS</text><text x="205" y="96" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">TX</text>
+<path d="M223,89 L288,89" stroke="rgba(255,153,64,.5)" stroke-width="2.5" fill="none" marker-end="url(#a5)"/>
+<rect x="288" y="72" width="162" height="34" rx="3" fill="rgba(255,153,64,.07)" stroke="rgba(255,153,64,.3)"/><text x="369" y="87" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff9940">P2WPKH — 46,100 sats</text><text x="369" y="99" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">all merged, fee deducted</text>
+<text x="240" y="166" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">≥3 inputs · ≤2 outputs · same script type · no round payment → HIGH confidence</text>
+</svg>`,
+
+batch_payment:`<svg viewBox="0 0 500 190" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">BATCH PAYMENT DETECTION</text>
+<defs><marker id="a6" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.5)"/></marker></defs>
+<rect x="8" y="65" width="105" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="60" y="78" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">Exchange Input</text><text x="60" y="89" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">5,000,000 sats</text>
+<path d="M113,79 L173,95" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<circle cx="191" cy="95" r="16" fill="#071428" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/><text x="191" y="99" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">TX</text>
+<path d="M207,85 L265,35" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<path d="M207,91 L265,60" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<path d="M207,95 L265,85" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<path d="M207,99 L265,110" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<path d="M207,105 L265,135" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<path d="M207,111 L265,158" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a6)"/>
+<rect x="265" y="22" width="130" height="20" rx="2" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/><text x="330" y="36" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">P2WPKH 500,000 sats</text>
+<rect x="265" y="48" width="130" height="20" rx="2" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/><text x="330" y="62" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">P2WPKH 500,000 sats</text>
+<rect x="265" y="74" width="130" height="20" rx="2" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/><text x="330" y="88" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">P2WPKH 500,000 sats</text>
+<rect x="265" y="100" width="130" height="20" rx="2" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/><text x="330" y="114" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">P2WPKH 500,000 sats</text>
+<rect x="265" y="126" width="130" height="20" rx="2" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/><text x="330" y="140" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">P2WPKH 500,000 sats</text>
+<rect x="265" y="152" width="130" height="18" rx="2" fill="rgba(58,107,153,.1)" stroke="rgba(58,107,153,.3)"/><text x="330" y="165" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">P2WPKH change</text>
+<text x="250" y="182" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">≤3 inputs · ≥4 outputs · homogeneous output types → HIGH (exchange/payroll)</text>
+</svg>`,
+
+dust_detection:`<svg viewBox="0 0 480 165" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="240" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">DUST DETECTION</text>
+<defs><marker id="a7" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.5)"/></marker></defs>
+<rect x="8" y="26" width="135" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="75" y="39" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">Normal Input</text><text x="75" y="50" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">500,000 sats</text>
+<path d="M143,40 L190,68" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a7)"/>
+<circle cx="208" cy="74" r="16" fill="#071428" stroke="rgba(0,212,255,.5)" stroke-width="1.5"/><text x="208" y="78" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">TX</text>
+<path d="M224,66 L272,44" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a7)"/>
+<path d="M224,74 L272,74" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#a7)"/>
+<path d="M224,82 L272,108" stroke="rgba(255,77,106,.5)" stroke-width="2" fill="none" marker-end="url(#a7)"/>
+<rect x="272" y="30" width="155" height="22" rx="3" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/><text x="349" y="45" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">P2TR — 499,000 sats normal</text>
+<rect x="272" y="60" width="155" height="22" rx="3" fill="rgba(58,107,153,.1)" stroke="rgba(58,107,153,.3)"/><text x="349" y="75" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">P2WPKH — 500 sats (ok)</text>
+<rect x="272" y="96" width="155" height="22" rx="3" fill="rgba(255,77,106,.1)" stroke="rgba(255,77,106,.4)"/><text x="349" y="107" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">⚠ P2WPKH — 200 sats DUST</text><text x="349" y="116" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff4d6a">below 294 sat limit</text>
+<rect x="8" y="128" width="464" height="30" rx="4" fill="rgba(255,77,106,.04)" stroke="rgba(255,77,106,.15)"/>
+<text x="240" y="141" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">Dust limits: P2PKH ≥546 · P2WPKH ≥294 · P2TR ≥330 · P2SH ≥540</text>
+<text x="240" y="152" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">2+ dust outputs → possible_dust_attack=true · used for UTXO tracking</text>
+</svg>`,
+
+address_reuse:`<svg viewBox="0 0 500 178" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">ADDRESS REUSE DETECTION</text>
+<rect x="8" y="30" width="140" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="78" y="43" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">TX A output</text><text x="78" y="53" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">bc1qABC…xyz</text>
+<rect x="8" y="88" width="140" height="28" rx="3" fill="#071428" stroke="#163666"/><text x="78" y="101" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">TX B output (same block)</text><text x="78" y="111" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">bc1qABC…xyz</text>
+<path d="M148,44 L194,75" stroke="rgba(255,77,106,.5)" stroke-width="2" stroke-dasharray="4,3" fill="none"/>
+<path d="M148,102 L194,75" stroke="rgba(255,77,106,.5)" stroke-width="2" stroke-dasharray="4,3" fill="none"/>
+<circle cx="208" cy="75" r="13" fill="rgba(255,77,106,.1)" stroke="rgba(255,77,106,.5)" stroke-width="1.5"/><text x="208" y="79" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff4d6a">SAME</text>
+<rect x="238" y="50" width="250" height="50" rx="4" fill="rgba(255,77,106,.04)" stroke="rgba(255,77,106,.2)"/>
+<text x="363" y="66" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff4d6a">bc1qABC…xyz in both TX A + TX B</text>
+<text x="363" y="78" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">links transactions to same wallet</text>
+<text x="363" y="90" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">privacy severely weakened</text>
+<rect x="8" y="132" width="232" height="22" rx="3" fill="rgba(255,77,106,.04)" stroke="rgba(255,77,106,.15)"/>
+<text x="124" y="143" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Intra-TX: input addr = output addr</text><text x="124" y="151" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff4d6a">→ detected as reuse</text>
+<rect x="248" y="132" width="244" height="22" rx="3" fill="rgba(0,255,157,.04)" stroke="rgba(0,255,157,.15)"/>
+<text x="370" y="143" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">address_freshness: all_fresh=true</text><text x="370" y="151" text-anchor="middle" font-family="monospace" font-size="6" fill="#00ff9d">→ good wallet hygiene</text>
+<text x="250" y="168" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Block-scope only · cross-block reuse requires full UTXO index</text>
+</svg>`,
+
+output_position:`<svg viewBox="0 0 500 168" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">OUTPUT POSITION ANALYSIS</text>
+<rect x="8" y="24" width="230" height="58" rx="4" fill="rgba(0,212,255,.04)" stroke="rgba(0,212,255,.2)"/>
+<text x="123" y="37" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">BIP69 Lexicographic Order</text>
+<text x="123" y="49" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">sorted by (value ASC, script ASC)</text>
+<text x="123" y="60" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">#0: 9,350 sats (change — smaller)</text>
+<text x="123" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">#1: 100,000 sats (payment)</text>
+<rect x="8" y="90" width="230" height="42" rx="4" fill="rgba(255,153,64,.04)" stroke="rgba(255,153,64,.2)"/>
+<text x="123" y="103" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff9940">Change at Index 0</text>
+<text x="123" y="115" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">#0: change output (matches input type)</text>
+<text x="123" y="125" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">#1+: payment outputs</text>
+<rect x="248" y="24" width="244" height="58" rx="4" fill="rgba(167,139,250,.04)" stroke="rgba(167,139,250,.2)"/>
+<text x="370" y="37" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa">Random / Privacy-Preserving</text>
+<text x="370" y="49" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">No predictable ordering</text>
+<text x="370" y="60" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">#0: 100,000 (payment)</text>
+<text x="370" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">#1: 9,350 (change)</text>
+<rect x="248" y="90" width="244" height="42" rx="4" fill="rgba(58,107,153,.08)" stroke="rgba(58,107,153,.2)"/>
+<text x="370" y="103" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">Randomised output position</text>
+<text x="370" y="115" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">→ harder to identify change</text>
+<text x="370" y="125" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">→ better privacy</text>
+<text x="250" y="150" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">BIP69 detected → wallet fingerprint signal · confidence: MEDIUM</text>
+<text x="250" y="161" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">change@0 pattern → many wallets (Electrum, older Core builds)</text>
+</svg>`,
+
+address_freshness:`<svg viewBox="0 0 500 158" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">ADDRESS FRESHNESS DETECTION</text>
+<rect x="8" y="24" width="232" height="98" rx="4" fill="rgba(0,255,157,.03)" stroke="rgba(0,255,157,.2)"/>
+<text x="124" y="38" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">✓ ALL FRESH — Good Privacy</text>
+<text x="124" y="50" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">HD Wallet — new address per TX</text>
+<rect x="18" y="56" width="210" height="16" rx="2" fill="rgba(0,255,157,.06)" stroke="rgba(0,255,157,.2)"/><text x="123" y="68" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">Output #0: bc1pNEW1… (first use)</text>
+<rect x="18" y="76" width="210" height="16" rx="2" fill="rgba(0,255,157,.06)" stroke="rgba(0,255,157,.2)"/><text x="123" y="88" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">Output #1: bc1pNEW2… (first use)</text>
+<text x="124" y="106" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">privacy_score: GOOD</text>
+<text x="124" y="116" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">fresh_output_count: 2</text>
+<rect x="252" y="24" width="240" height="98" rx="4" fill="rgba(255,77,106,.03)" stroke="rgba(255,77,106,.2)"/>
+<text x="372" y="38" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff4d6a">✗ ALL REUSED — Poor Privacy</text>
+<text x="372" y="50" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Old wallet — static address</text>
+<rect x="262" y="56" width="220" height="16" rx="2" fill="rgba(255,77,106,.06)" stroke="rgba(255,77,106,.2)"/><text x="372" y="68" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">Output #0: 1REUSED… (seen 5×)</text>
+<rect x="262" y="76" width="220" height="16" rx="2" fill="rgba(255,77,106,.06)" stroke="rgba(255,77,106,.2)"/><text x="372" y="88" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">Output #1: 1REUSED2… (seen 3×)</text>
+<text x="372" y="106" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">privacy_score: POOR</text>
+<text x="372" y="116" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">reused_output_count: 2</text>
+<text x="250" y="138" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Detection scope: within-block only · cross-block needs full UTXO index</text>
+<text x="250" y="149" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">privacy_score: GOOD / MIXED / POOR based on fresh vs reused ratio</text>
+</svg>`,
+
+fee_pattern:`<svg viewBox="0 0 500 172" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">FEE PATTERN ANALYSIS</text>
+<rect x="8" y="22" width="145" height="52" rx="3" fill="rgba(0,212,255,.04)" stroke="rgba(0,212,255,.2)"/>
+<text x="80" y="35" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">Round Fee Rate</text>
+<text x="80" y="47" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">rate = 20.0 sat/vB</text>
+<text x="80" y="58" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">→ integer rate</text>
+<text x="80" y="68" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">wallet uses preset</text>
+<rect x="161" y="22" width="145" height="52" rx="3" fill="rgba(255,77,106,.04)" stroke="rgba(255,77,106,.2)"/>
+<text x="233" y="35" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff4d6a">High Priority/CPFP</text>
+<text x="233" y="47" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">rate &gt; 3× block median</text>
+<text x="233" y="58" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">→ urgency signal</text>
+<text x="233" y="68" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">small vbytes+high rate=CPFP</text>
+<rect x="314" y="22" width="178" height="52" rx="3" fill="rgba(255,153,64,.04)" stroke="rgba(255,153,64,.2)"/>
+<text x="403" y="35" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff9940">Minimum Fee</text>
+<text x="403" y="47" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">rate ≤ 1.1 sat/vB</text>
+<text x="403" y="58" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">→ test / protocol tx</text>
+<text x="403" y="68" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">LN opens, batch sweeps</text>
+<rect x="8" y="82" width="220" height="42" rx="3" fill="rgba(0,255,157,.04)" stroke="rgba(0,255,157,.15)"/>
+<text x="118" y="95" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">Round Fee Amount</text>
+<text x="118" y="107" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">fee_sats % 100 == 0</text>
+<text x="118" y="118" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">fee set by amount not rate</text>
+<rect x="236" y="82" width="256" height="42" rx="3" fill="rgba(58,107,153,.08)" stroke="rgba(58,107,153,.2)"/>
+<text x="364" y="95" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">Low Priority</text>
+<text x="364" y="107" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">rate &lt; 30% of block median</text>
+<text x="364" y="118" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">batch processing / non-urgent</text>
+<text x="250" y="144" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Fee patterns reveal wallet software, user intent, and protocol type</text>
+<text x="250" y="156" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Confidence: MEDIUM · flags: round_fee_rate, high_priority, possible_cpfp, minimum_fee, low_priority</text>
+<text x="250" y="167" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">block_median used as reference — computed per-block</text>
+</svg>`,
+
+wallet_fingerprint:`<svg viewBox="0 0 500 182" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="14" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">WALLET FINGERPRINTING</text>
+<rect x="8" y="22" width="150" height="66" rx="3" fill="rgba(0,212,255,.04)" stroke="rgba(0,212,255,.2)"/>
+<text x="83" y="35" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">Anti-Fee-Sniping</text>
+<text x="83" y="47" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">locktime = block height</text>
+<text x="83" y="58" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">e.g. locktime=850000</text>
+<text x="83" y="69" text-anchor="middle" font-family="monospace" font-size="6" fill="#00d4ff">→ Bitcoin Core / Electrum</text>
+<text x="83" y="80" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">modern wallet behaviour</text>
+<rect x="166" y="22" width="150" height="66" rx="3" fill="rgba(167,139,250,.04)" stroke="rgba(167,139,250,.2)"/>
+<text x="241" y="35" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa">Pure Taproot</text>
+<text x="241" y="47" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">all inputs = P2TR</text>
+<text x="241" y="58" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">all outputs = P2TR</text>
+<text x="241" y="69" text-anchor="middle" font-family="monospace" font-size="6" fill="#a78bfa">→ Taproot-native wallet</text>
+<text x="241" y="80" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">newer software stack</text>
+<rect x="324" y="22" width="168" height="66" rx="3" fill="rgba(255,153,64,.04)" stroke="rgba(255,153,64,.2)"/>
+<text x="408" y="35" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff9940">Mixed Generation</text>
+<text x="408" y="47" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">P2PKH + P2WPKH inputs</text>
+<text x="408" y="58" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">legacy + segwit mixed</text>
+<text x="408" y="69" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff9940">→ migrating wallet</text>
+<text x="408" y="80" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">spending old UTXOs</text>
+<rect x="8" y="96" width="150" height="50" rx="3" fill="rgba(0,255,157,.04)" stroke="rgba(0,255,157,.15)"/>
+<text x="83" y="109" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">RBF Always On</text>
+<text x="83" y="121" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">sequence = 0xFFFFFFFD</text>
+<text x="83" y="132" text-anchor="middle" font-family="monospace" font-size="6" fill="#00ff9d">→ RBF-aware wallet</text>
+<text x="83" y="142" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">Electrum default</text>
+<rect x="166" y="96" width="326" height="50" rx="3" fill="rgba(58,107,153,.06)" stroke="rgba(58,107,153,.2)"/>
+<text x="329" y="109" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">TX Version + Sequence</text>
+<text x="329" y="121" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">v1=legacy · v2=CSV · 0xFFFFFFFF=no RBF/no lock</text>
+<text x="329" y="132" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">0xFFFFFFFE=no RBF · 0xFFFFFFFD=RBF</text>
+<text x="329" y="142" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff9940">Confidence: LOW</text>
+<text x="250" y="160" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Fingerprinting correlates weak signals · more signals = higher confidence</text>
+<text x="250" y="172" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Cannot definitively identify wallet without external oracle / label data</text>
+</svg>`,
+
+block_format:`<svg viewBox="0 0 560 215" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="280" y="15" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">BITCOIN BLOCK FILE FORMAT</text>
+<defs><marker id="bf1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.5)"/></marker></defs>
+<rect x="8" y="22" width="544" height="26" rx="3" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.3)"/>
+<text x="280" y="33" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">blk*.dat — sequential blocks, each prefixed with magic bytes + uint32 size</text>
+<text x="280" y="43" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Bitcoin Core v28+: entire file XOR decoded with rotating key from xor.dat</text>
+<rect x="8" y="56" width="55" height="46" rx="3" fill="rgba(255,77,106,.1)" stroke="rgba(255,77,106,.4)"/>
+<text x="35" y="72" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff4d6a">MAGIC</text>
+<text x="35" y="82" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff4d6a">4 bytes</text>
+<text x="35" y="92" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">F9BEB4D9</text>
+<rect x="68" y="56" width="55" height="46" rx="3" fill="rgba(255,153,64,.1)" stroke="rgba(255,153,64,.4)"/>
+<text x="95" y="72" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">SIZE</text>
+<text x="95" y="82" text-anchor="middle" font-family="monospace" font-size="6" fill="#ff9940">4 bytes LE</text>
+<text x="95" y="92" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">payload len</text>
+<rect x="128" y="56" width="420" height="46" rx="3" fill="rgba(0,212,255,.05)" stroke="rgba(0,212,255,.2)"/>
+<text x="338" y="72" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">BLOCK PAYLOAD (size bytes)</text>
+<text x="338" y="82" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">header(80) + varint(tx_count) + transactions[]  →  [next magic+size+payload …]</text>
+<text x="338" y="92" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">single blk*.dat can contain many blocks; parse until EOF / incomplete frame</text>
+<rect x="8" y="112" width="544" height="26" rx="3" fill="rgba(0,255,157,.05)" stroke="rgba(0,255,157,.2)"/>
+<text x="280" y="123" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">80-byte Block Header</text>
+<text x="280" y="134" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">version(4) · prev_hash(32) · merkle_root(32) · timestamp(4) · bits(4) · nonce(4) → dSHA256 = block_hash</text>
+<rect x="8" y="148" width="544" height="26" rx="3" fill="rgba(167,139,250,.05)" stroke="rgba(167,139,250,.25)"/>
+<text x="280" y="159" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa">rev*.dat — Undo Data (prevout values for fee calc)</text>
+<text x="280" y="169" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Same magic+size framing · per non-coinbase input: varint7(height|coinbase) + compressed_amount + compressed_script</text>
+<rect x="8" y="184" width="270" height="24" rx="3" fill="rgba(245,158,11,.05)" stroke="rgba(245,158,11,.25)"/>
+<text x="143" y="196" text-anchor="middle" font-family="monospace" font-size="7" fill="#f59e0b">xor.dat — XOR obfuscation key (Core v28+)</text>
+<text x="143" y="205" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">Typically 8 bytes, rotated · all-zero = no obfuscation</text>
+<rect x="286" y="184" width="266" height="24" rx="3" fill="rgba(0,212,255,.04)" stroke="rgba(0,212,255,.15)"/>
+<text x="419" y="196" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">BIP34: coinbase scriptSig[0]=push_len, next N bytes = height LE</text>
+<text x="419" y="205" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">e.g. 03 + 40 0D 03 = height 200,000</text>
+</svg>`,
+
+parser_flow:`<svg viewBox="0 0 560 188" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="280" y="15" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">SHERLOCK PARSING PIPELINE</text>
+<defs><marker id="pf1" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.6)"/></marker></defs>
+<rect x="5" y="25" width="80" height="22" rx="3" fill="rgba(255,77,106,.1)" stroke="rgba(255,77,106,.4)"/><text x="45" y="40" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff4d6a">blk*.dat</text>
+<rect x="90" y="25" width="80" height="22" rx="3" fill="rgba(167,139,250,.1)" stroke="rgba(167,139,250,.4)"/><text x="130" y="40" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa">rev*.dat</text>
+<rect x="175" y="25" width="80" height="22" rx="3" fill="rgba(245,158,11,.1)" stroke="rgba(245,158,11,.4)"/><text x="215" y="40" text-anchor="middle" font-family="monospace" font-size="8" fill="#f59e0b">xor.dat</text>
+<path d="M215,47 L215,62" stroke="rgba(0,212,255,.5)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<path d="M45,47 L100,62" stroke="rgba(0,212,255,.5)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<path d="M130,47 L130,62" stroke="rgba(0,212,255,.5)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<rect x="5" y="62" width="250" height="22" rx="3" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/>
+<text x="130" y="77" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">xor_decode(data, key) → raw bytes</text>
+<path d="M130,84 L130,98" stroke="rgba(0,212,255,.5)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<rect x="5" y="98" width="250" height="22" rx="3" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/>
+<text x="130" y="110" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">_iter_frames() → block payloads</text>
+<text x="130" y="119" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">magic scan · size prefix · yields raw block bytes until EOF</text>
+<path d="M130,122 L130,136" stroke="rgba(0,212,255,.5)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<rect x="5" y="136" width="250" height="22" rx="3" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/>
+<text x="130" y="148" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">parse_block_header + transactions</text>
+<text x="130" y="157" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">80-byte header · varint tx_count · segwit detect · txid (dSHA256)</text>
+<path d="M255,110 L310,110" stroke="rgba(0,212,255,.4)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<rect x="310" y="98" width="245" height="34" rx="3" fill="rgba(167,139,250,.06)" stroke="rgba(167,139,250,.25)"/>
+<text x="432" y="113" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa">undo matching (rev*.dat)</text>
+<text x="432" y="123" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">prevout value + scriptPubKey per input</text>
+<text x="432" y="131" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">enables fee: Σin − Σout · script type classification</text>
+<path d="M130,158 L130,170" stroke="rgba(0,212,255,.5)" stroke-width="1.5" fill="none" marker-end="url(#pf1)"/>
+<rect x="5" y="170" width="550" height="14" rx="3" fill="rgba(0,255,157,.06)" stroke="rgba(0,255,157,.2)"/>
+<text x="280" y="181" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">parsed_block dicts → heuristics engine (15 heuristics) → JSON + Markdown reports</text>
+</svg>`,
+
+varint:`<svg viewBox="0 0 500 158" xmlns="http://www.w3.org/2000/svg" style="background:#040d1a;border-radius:8px">
+<text x="250" y="15" text-anchor="middle" font-family="monospace" font-size="10" fill="#00d4ff" letter-spacing="2">BITCOIN VARINT + SEGWIT ENCODING</text>
+<text x="250" y="28" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">Variable-length integers encode counts (tx_count, input_count, script length, etc.)</text>
+<rect x="8" y="35" width="115" height="48" rx="3" fill="rgba(0,255,157,.06)" stroke="rgba(0,255,157,.2)"/>
+<text x="65" y="49" text-anchor="middle" font-family="monospace" font-size="8" fill="#00ff9d">1 byte</text>
+<text x="65" y="60" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">value &lt; 0xFD</text>
+<text x="65" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#00ff9d">0x05 = 5</text>
+<text x="65" y="79" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">range 0-252</text>
+<rect x="130" y="35" width="115" height="48" rx="3" fill="rgba(0,212,255,.06)" stroke="rgba(0,212,255,.2)"/>
+<text x="187" y="49" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">3 bytes</text>
+<text x="187" y="60" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">0xFD + 2 bytes LE</text>
+<text x="187" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#00d4ff">FD 0001 = 256</text>
+<text x="187" y="79" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">253-65535</text>
+<rect x="252" y="35" width="115" height="48" rx="3" fill="rgba(255,153,64,.06)" stroke="rgba(255,153,64,.2)"/>
+<text x="309" y="49" text-anchor="middle" font-family="monospace" font-size="8" fill="#ff9940">5 bytes</text>
+<text x="309" y="60" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">0xFE + 4 bytes LE</text>
+<text x="309" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#ff9940">FE 00000100</text>
+<text x="309" y="79" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">65536-4B</text>
+<rect x="374" y="35" width="118" height="48" rx="3" fill="rgba(167,139,250,.06)" stroke="rgba(167,139,250,.2)"/>
+<text x="433" y="49" text-anchor="middle" font-family="monospace" font-size="8" fill="#a78bfa">9 bytes</text>
+<text x="433" y="60" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">0xFF + 8 bytes LE</text>
+<text x="433" y="71" text-anchor="middle" font-family="monospace" font-size="7" fill="#a78bfa">FF 0100000000000000</text>
+<text x="433" y="79" text-anchor="middle" font-family="monospace" font-size="6" fill="#3a6b99">4B+</text>
+<rect x="8" y="92" width="484" height="28" rx="3" fill="rgba(0,212,255,.03)" stroke="rgba(0,212,255,.1)"/>
+<text x="250" y="104" text-anchor="middle" font-family="monospace" font-size="8" fill="#3a6b99">SegWit TX: version(4) + 0x00 0x01 (marker+flag) + inputs + outputs + witnesses + locktime</text>
+<text x="250" y="115" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Witnesses excluded from TXID hash · weight = base_size*3 + total_size · vbytes = ceil(weight/4)</text>
+<text x="250" y="136" text-anchor="middle" font-family="monospace" font-size="8" fill="#00d4ff">TXID = dSHA256(non-witness serialization) displayed as reversed bytes (LE hex)</text>
+<text x="250" y="148" text-anchor="middle" font-family="monospace" font-size="7" fill="#3a6b99">Legacy: entire tx · SegWit: strip marker/flag/witnesses · both display in reversed byte order</text>
+</svg>`
+};
+
+// ════════════════════════════════════════════════════
+// CHAT
+// ════════════════════════════════════════════════════
+function toggleChat(){chatOpen=!chatOpen;document.getElementById('chat-panel').classList.toggle('open',chatOpen);}
+function toggleConfig(){configOpen=!configOpen;document.getElementById('cp-config').style.display=configOpen?'block':'none';document.getElementById('cfg-toggle').textContent=configOpen?'✕ close':'⚙ API';}
+function setProvider(p){
+  aiProvider=p;
+  ['openai','gemini'].forEach(x=>document.getElementById('prov-'+x).classList.toggle('on',x===p));
+  const isOAI=p==='openai';
+  document.getElementById('oai-grp').style.display=isOAI?'':'none';
+  ['gem-grp-25','gem-grp-20'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=isOAI?'none':'';});
+  document.getElementById('cp-model').value=isOAI?'gpt-4o-mini':'gemini-2.5-flash';
+  document.getElementById('cp-key').placeholder=isOAI?'sk-...':'AIza...';
+  updateKeyStatus();
+}
+function onKeyInput(){
+  const k=document.getElementById('cp-key').value.trim();
+  document.getElementById('cp-send').disabled=!k;
+  updateKeyStatus();
+  if(k.length>20){configOpen=false;document.getElementById('cp-config').style.display='none';document.getElementById('cfg-toggle').textContent='⚙ API';}
+}
+function updateKeyStatus(){
+  const k=document.getElementById('cp-key').value.trim(),el=document.getElementById('cp-key-status');
+  if(!k){el.textContent='';return;}
+  const valid=aiProvider==='openai'?k.startsWith('sk-'):k.startsWith('AIza');
+  el.textContent=valid?'✓ KEY FORMAT OK':'⚠ FORMAT UNEXPECTED';
+  el.style.color=valid?'var(--green)':'var(--amber)';
+}
+function handleChatFileAttach(e){
+  const file=e.target.files[0];if(!file)return;
+  chatAttachedFile=file;
+  document.getElementById('cp-file-name').textContent=file.name;
+  document.getElementById('cp-file-clear').style.display='inline';
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      chatAttachedContent=JSON.parse(ev.target.result);
+      const s=chatAttachedContent?.analysis_summary||{};
+      document.getElementById('cp-ctx-text').textContent=`${file.name} · ${chatAttachedContent.block_count||0} blocks · ${(s.total_transactions_analyzed||0).toLocaleString()} txs`;
+      document.getElementById('cp-ctx-strip').classList.add('on');
+      document.getElementById('cp-ctx-pill').classList.add('on');
+      ['qp-ctx-1','qp-ctx-2','qp-ctx-3'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='';});
+    }catch{chatAttachedContent=ev.target.result;}
+  };
+  reader.readAsText(file);
+}
+function clearChatFile(){
+  chatAttachedFile=null;chatAttachedContent=null;
+  document.getElementById('cp-file-name').textContent='No file attached';
+  document.getElementById('cp-file-clear').style.display='none';
+  document.getElementById('cp-file-input').value='';
+  clearCtx();
+}
+function clearCtx(){
+  document.getElementById('cp-ctx-strip').classList.remove('on');
+  document.getElementById('cp-ctx-pill').classList.remove('on');
+  ['qp-ctx-1','qp-ctx-2','qp-ctx-3','qp-ctx-4','qp-ctx-5'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+}
+function qp(text){document.getElementById('cp-input').value=text;sendChat();}
+function chatKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px';}
+
+function buildSysPrompt(){
+  let sys=`You are a Bitcoin chain analysis expert inside Sherlock, a Bitcoin chain analysis tool.
+
+DIAGRAM RULE — CRITICAL: When asked about any heuristic below, emit EXACTLY the placeholder text on its own line:
+[DIAGRAM:cioh] [DIAGRAM:change_detection] [DIAGRAM:coinjoin] [DIAGRAM:peeling_chain]
+[DIAGRAM:consolidation] [DIAGRAM:batch_payment] [DIAGRAM:dust_detection]
+[DIAGRAM:address_reuse] [DIAGRAM:output_position] [DIAGRAM:address_freshness]
+[DIAGRAM:fee_pattern] [DIAGRAM:wallet_fingerprint]
+Place ONE diagram placeholder after your text explanation. Always include when the question is about a specific heuristic.
+
+SCOPE: Bitcoin blockchain, chain analysis heuristics, AND Bitcoin Core block file formats. Redirect unrelated topics politely.
+
+PARSER / FILE FORMAT — explain these WITH diagrams:
+- blk*.dat: magic(4)+size(4)+payload · payload = header(80)+varint(tx_count)+transactions
+- rev*.dat: same framing · per non-coinbase input: varint7(height|coinbase)+compressed_amount+compressed_script
+- xor.dat: 8-byte rotating XOR key (Core v28+) · all-zero = no obfuscation
+- Block header: 80 bytes — version, prev_hash, merkle_root, timestamp, bits, nonce
+- Segwit: marker 0x00 flag 0x01 after version · witnesses excluded from TXID
+- TXID: dSHA256(non-witness bytes) reversed · vbytes = ceil((base*3+total)/4)
+- BIP34 height: coinbase scriptSig push opcode + N bytes little-endian
+- Varint: 1/3/5/9 bytes based on range (<253 / <65536 / <4B / else)
+- Fee: Σ(prevout values from rev*.dat) − Σ(output values)
+Use [DIAGRAM:block_format] for file format, [DIAGRAM:parser_flow] for pipeline, [DIAGRAM:varint] for encoding.
+
+SCOPE: Bitcoin/blockchain only. Redirect unrelated topics politely.
+STYLE: Concise, plain English. Bold with **term**. Code with \`value\`. Under 250 words.
+
+15 HEURISTICS IN THIS SYSTEM:
+1. **CIOH** — multi-input = same wallet. Foundational heuristic. HIGH/MEDIUM confidence.
+2. **change_detection** — script_type_match → round_number → value_analysis. HIGH/MED/LOW.
+3. **coinjoin** — equal-value outputs, mixed inputs, ≥3 in/out. HIGH/MEDIUM.
+4. **consolidation** — ≥3 inputs → ≤2 outputs. UTXO maintenance. HIGH/MEDIUM.
+5. **self_transfer** — all output types ⊆ input types, no round outputs. MEDIUM.
+6. **round_number_payment** — output divisible by 10k/100k/1M sats. Likely payment.
+7. **op_return** — embedded data. Omni/OpenTimestamps/Runes/Ordinals protocols.
+8. **address_reuse** — same scriptPubKey in multiple block txs or intra-tx. Privacy risk.
+9. **peeling_chain** — 2 outputs, ratio ≥5×, large output spent in same block. HIGH/MEDIUM.
+10. **batch_payment** — ≤3 inputs, ≥4 homogeneous outputs. Exchange/payroll pattern.
+11. **dust_detection** — below dust limit (P2PKH 546, P2WPKH 294, P2TR 330 sats). Tracking attack.
+12. **output_position** — BIP69 ordering or change@index0. Reveals wallet software.
+13. **address_freshness** — fresh=first block appearance. all_fresh=GOOD, all_reused=POOR privacy.
+14. **fee_pattern** — round rate, high/low vs median, CPFP candidate, minimum fee.
+15. **wallet_fingerprint** — locktime=block height, pure taproot, mixed generations, RBF. Confidence LOW.`;
+
+  if(chatAttachedContent&&typeof chatAttachedContent==='object'){
+    const ac=chatAttachedContent;
+    if(ac._type==='block_analysis'){
+      const s=ac.analysis_summary||{},fs=s.fee_rate_stats||{};
+      const hF=Object.entries(ac.heuristic_fire_counts||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+':'+v).join(', ');
+      const clsD=Object.entries(ac.classification_breakdown||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+':'+v).join(', ');
+      sys+=`\n\nLOADED BLOCK: ${ac.file}
+blocks=${ac.block_count} | txs=${s.total_transactions_analyzed} | flagged=${s.flagged_transactions}
+fee: min=${fs.min_sat_vb} med=${fs.median_sat_vb} mean=${fs.mean_sat_vb} max=${fs.max_sat_vb} sat/vB
+heuristics_applied: ${(s.heuristics_applied||[]).join(', ')}
+heuristic_fire_counts: ${hF}
+classifications: ${clsD}
+script_dist: ${JSON.stringify(s.script_type_distribution||{})}
+notable_txs:\n${(ac.notable_transactions||[]).join('\n')||'  none'}
+blocks_detail: ${JSON.stringify(ac.blocks_brief||[])}
+When explaining a fired heuristic, include its [DIAGRAM:heuristic_id].`;
+    } else {
+      const s=ac?.analysis_summary||{},fs=s.fee_rate_stats||{};
+      sys+=`\n\nATTACHED FILE: ${chatAttachedFile?.name}
+blocks=${ac.block_count} | txs=${s.total_transactions_analyzed} | flagged=${s.flagged_transactions}
+fee: min=${fs.min_sat_vb} median=${fs.median_sat_vb} max=${fs.max_sat_vb} sat/vB
+heuristics: ${(s.heuristics_applied||[]).join(', ')}
+script_dist: ${JSON.stringify(s.script_type_distribution||{})}`;
+    }
+  }
+  return sys;
+}
+
+async function sendChat(){
+  if(chatBusy)return;
+  const input=document.getElementById('cp-input');
+  const apiKey=document.getElementById('cp-key').value.trim();
+  const text=input.value.trim();
+  if(!text)return;
+  if(!apiKey){appendErrMsg('Enter an API key in ⚙ API section.');return;}
+  const empty=document.getElementById('cp-empty');if(empty)empty.remove();
+  appendMsg('user',text);
+  input.value='';input.style.height='38px';
+  chatHistory.push({role:'user',content:text});
+  const bubble=appendStreamBubble();
+  document.getElementById('cp-send').disabled=true;chatBusy=true;
+  streamAbort=new AbortController();
+  let fullText='';
+  try{
+    const model=document.getElementById('cp-model').value;
+    const sys=buildSysPrompt();
+    fullText=aiProvider==='openai'
+      ?await streamOpenAI(apiKey,model,sys,bubble,streamAbort.signal)
+      :await streamGemini(apiKey,model,sys,text,bubble,streamAbort.signal);
+    finishStreamBubble(bubble,fullText);
+    chatHistory.push({role:'assistant',content:fullText});
+  }catch(e){
+    if(e.name==='AbortError'){if(fullText)finishStreamBubble(bubble,fullText);else{bubble.remove();appendErrMsg('Cancelled.');}}
+    else{bubble.remove();appendErrMsg(e.message||'API error — check key.');}
+  }finally{
+    chatBusy=false;streamAbort=null;
+    document.getElementById('cp-send').disabled=!document.getElementById('cp-key').value.trim();
+  }
+}
+
+async function streamOpenAI(apiKey,model,sys,bubble,signal){
+  const msgs=[{role:'system',content:sys},...chatHistory.slice(-20,-1)];
+  const resp=await fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},
+    body:JSON.stringify({model,messages:msgs,max_tokens:900,temperature:0.4,stream:true}),signal,
+  });
+  if(!resp.ok){let e='OpenAI '+resp.status;try{const j=await resp.json();e=j.error?.message||e;}catch(_){}throw new Error(e);}
+  const reader=resp.body.getReader(),dec=new TextDecoder();
+  let full='',buf='';
+  while(true){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split('\n');buf=lines.pop();
+    for(const l of lines){const t=l.replace(/^data:\s*/,'');if(!t||t==='[DONE]')continue;try{const c=JSON.parse(t);const d=c.choices?.[0]?.delta?.content||'';if(d){full+=d;updateStreamBubble(bubble,full);}}catch(_){}}
+  }
+  return full||'(empty)';
+}
+
+async function streamGemini(apiKey,model,sys,userMsg,bubble,signal){
+  const contents=chatHistory.slice(-20,-1).map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}));
+  contents.push({role:'user',parts:[{text:userMsg}]});
+  const modelPath=model.includes('/')?model:`models/${model}`;
+  const url=`https://generativelanguage.googleapis.com/v1beta/${modelPath}:streamGenerateContent?alt=sse&key=${apiKey}`;
+  const resp=await fetch(url,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents,generationConfig:{maxOutputTokens:900,temperature:0.4}}),signal,
+  });
+  if(!resp.ok){let e='Gemini '+resp.status;try{const j=await resp.json();e=j.error?.message||e;}catch(_){}throw new Error(e);}
+  const reader=resp.body.getReader(),dec=new TextDecoder();
+  let full='',buf='';
+  while(true){
+    const{done,value}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split('\n');buf=lines.pop();
+    for(const l of lines){
+      const t=l.replace(/^data:\s*/,'');if(!t)continue;
+      try{const c=JSON.parse(t);if(c.candidates?.[0]?.finishReason==='SAFETY')throw new Error('Safety blocked.');const d=c.candidates?.[0]?.content?.parts?.[0]?.text||'';if(d){full+=d;updateStreamBubble(bubble,full);}}
+      catch(pe){if(pe.message?.includes('Safety')||pe.message?.includes('safety'))throw pe;}
+    }
+  }
+  if(!full)throw new Error('Empty Gemini response.');
+  return full;
+}
+
+function renderAiText(rawText){
+  const parts=rawText.split(/(\[DIAGRAM:\w+\])/);
+  let html='';
+  for(const part of parts){
+    const m=part.match(/^\[DIAGRAM:(\w+)\]$/);
+    if(m){html+=DIAGRAMS[m[1]]||`<span style="color:var(--muted);font-family:var(--ff-mono);font-size:9px">[diagram: ${m[1]}]</span>`;}
+    else{
+      html+=esc(part)
+        .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g,'<em>$1</em>')
+        .replace(/`([^`]+)`/g,'<code>$1</code>')
+        .replace(/^[-•]\s+(.+)$/gm,'<li>$1</li>')
+        .replace(/((<li>.*<\/li>\n?)+)/g,'<ul>$1</ul>')
+        .replace(/\n(?!<)/g,'<br>');
+    }
+  }
+  return html;
+}
+
+function appendStreamBubble(){
+  const msgs=document.getElementById('cp-msgs');
+  const d=document.createElement('div');
+  d.className='msg ai streaming';
+  d.innerHTML=`<div class="msg-av ai">AI</div><div class="msg-body stream-body"><span class="stream-cursor"></span></div>`;
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;
+}
+function updateStreamBubble(bubble,text){
+  const b=bubble.querySelector('.stream-body');if(!b)return;
+  b.innerHTML=renderAiText(text)+'<span class="stream-cursor"></span>';
+  document.getElementById('cp-msgs').scrollTop=document.getElementById('cp-msgs').scrollHeight;
+}
+function finishStreamBubble(bubble,text){
+  bubble.classList.remove('streaming');
+  const b=bubble.querySelector('.stream-body');if(b)b.innerHTML=renderAiText(text);
+  document.getElementById('cp-msgs').scrollTop=document.getElementById('cp-msgs').scrollHeight;
+}
+function appendMsg(role,text){
+  const msgs=document.getElementById('cp-msgs');
+  const d=document.createElement('div');
+  d.className=`msg ${role}`;
+  d.innerHTML=`<div class="msg-av ${role}">${role==='ai'?'AI':'YOU'}</div><div class="msg-body">${role==='ai'?renderAiText(text):esc(text)}</div>`;
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;return d;
+}
+function appendErrMsg(msg){
+  const msgs=document.getElementById('cp-msgs'),d=document.createElement('div');
+  d.className='msg ai';
+  d.innerHTML=`<div class="msg-av ai" style="background:var(--red);color:#fff">!</div><div class="msg-body err">${esc(msg)}</div>`;
+  msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+init();
+</script>
+</body>
+</html>

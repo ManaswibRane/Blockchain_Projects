@@ -1,0 +1,5 @@
+fixtures/*.dat
+node_modules/
+__pycache__/
+target/
+.env

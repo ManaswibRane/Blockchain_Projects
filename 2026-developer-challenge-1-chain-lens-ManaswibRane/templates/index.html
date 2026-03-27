@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chain Lens — Bitcoin Transaction Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=IBM+Plex+Mono:ital,wght@0,400;0,600;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   CHAIN LENS — GLACIAL DATA TERMINAL
+   Deep arctic navy / electric cyan / ice white
+═══════════════════════════════════════════════════════════════ */
+:root {
+  --void: #020810;
+  --abyss: #040d1a;
+  --deep: #071428;
+  --surface: #0a1d38;
+  --lift: #0d2245;
+  --edge: #0f2d5a;
+  --wire: #163666;
+  --ice: #1e4a80;
+
+  --cyan: #00d4ff;
+  --cyan-dim: #0099bb;
+  --cyan-glow: rgba(0,212,255,0.12);
+  --cyan-ghost: rgba(0,212,255,0.04);
+  --cyan-bright: #40e8ff;
+
+  --text: #d6eaf8;
+  --text-bright: #f0f8ff;
+  --muted: #3a6b99;
+  --faint: #0c2540;
+
+  --green: #00ff9d;
+  --red: #ff4d6a;
+  --orange: #ff9940;
+  --violet: #a78bfa;
+
+  --scan: rgba(0,212,255,0.025);
+
+  --ff-mono: 'IBM Plex Mono', monospace;
+  --ff-display: 'Orbitron', sans-serif;
+  --ff-body: 'Outfit', sans-serif;
+
+  --r: 3px; --r2: 6px; --r3: 10px;
+}
+
+/* ── Reset ── */
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--void);
+  color:var(--text);
+  font-family:var(--ff-body);
+  font-size:14px;
+  line-height:1.6;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* Deep space radial glow */
+body::after{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0,100,200,0.15) 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* Scanline */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,var(--scan) 2px,var(--scan) 4px);
+  pointer-events:none;
+  z-index:1000;
+}
+
+/* ── Header ── */
+.hdr{
+  background:rgba(4,13,26,0.96);
+  border-bottom:1px solid var(--edge);
+  padding:0 32px;
+  display:flex;
+  align-items:center;
+  gap:24px;
+  height:58px;
+  position:sticky;
+  top:0;
+  z-index:200;
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+.hdr::after{
+  content:'';
+  position:absolute;
+  bottom:0;left:0;right:0;
+  height:1px;
+  background:linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity:.4;
+}
+.logo{
+  font-family:var(--ff-display);
+  font-size:18px;
+  font-weight:700;
+  letter-spacing:4px;
+  color:var(--cyan);
+  line-height:1;
+  text-shadow:0 0 24px rgba(0,212,255,0.5), 0 0 60px rgba(0,212,255,0.2);
+}
+.logo-sub{
+  font-family:var(--ff-mono);
+  font-size:8px;
+  color:var(--muted);
+  letter-spacing:3px;
+  text-transform:uppercase;
+  margin-top:3px;
+}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:16px;}
+.hdr-badge{
+  font-family:var(--ff-mono);
+  font-size:8px;
+  color:var(--cyan);
+  border:1px solid var(--cyan-dim);
+  padding:3px 10px;
+  border-radius:2px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  background:rgba(0,212,255,.05);
+}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--green);
+  box-shadow:0 0 8px var(--green);
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Tabs ── */
+.tabs{
+  display:flex;
+  border-bottom:1px solid var(--edge);
+  background:var(--abyss);
+  position:relative;
+  z-index:1;
+}
+.tab{
+  padding:14px 28px;
+  background:none;border:none;
+  color:var(--muted);
+  font-family:var(--ff-mono);
+  font-size:10px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+  transition:all .2s;
+}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--cyan);border-bottom-color:var(--cyan);text-shadow:0 0 10px rgba(0,212,255,.4)}
+
+/* ── Layout ── */
+.wrap{max-width:1400px;margin:0 auto;padding:32px;position:relative;z-index:1;}
+.panel{display:none}.panel.on{display:block}
+
+/* ── Input card ── */
+.input-card{
+  background:var(--surface);
+  border:1px solid var(--edge);
+  border-radius:var(--r3);
+  padding:28px;
+  margin-bottom:28px;
+  position:relative;
+  overflow:hidden;
+}
+.input-card::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;
+  height:1px;
+  background:linear-gradient(90deg,var(--cyan),rgba(0,212,255,.2),transparent);
+}
+.input-card::after{
+  content:'';
+  position:absolute;
+  top:0;left:0;
+  width:1px;height:80px;
+  background:linear-gradient(180deg,var(--cyan),transparent);
+  opacity:.5;
+}
+.card-title{
+  font-family:var(--ff-display);
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:3px;
+  color:var(--cyan);
+  margin-bottom:20px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-transform:uppercase;
+}
+.card-title .ico{font-size:16px}
+
+/* ── Grid ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+
+/* ── Fields ── */
+.field{margin-bottom:16px}
+.field label{
+  display:block;
+  font-family:var(--ff-mono);
+  font-size:8px;
+  color:var(--muted);
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+  margin-bottom:6px;
+}
+.field label .tip{color:var(--cyan-dim);cursor:help;border-bottom:1px dashed var(--cyan-dim);margin-left:4px;}
+textarea,input[type=text],input[type=password],input[type=file]{
+  width:100%;
+  background:var(--abyss);
+  border:1px solid var(--wire);
+  border-radius:var(--r);
+  color:var(--text);
+  font-family:var(--ff-mono);
+  font-size:11px;
+  padding:10px 12px;
+  outline:none;
+  transition:border .15s,box-shadow .15s;
+  resize:vertical;
+}
+textarea:focus,input[type=text]:focus,input[type=password]:focus{
+  border-color:var(--cyan-dim);
+  box-shadow:0 0 0 2px var(--cyan-glow), inset 0 0 20px rgba(0,212,255,.03);
+}
+input[type=file]{cursor:pointer;padding:10px;color:var(--muted);}
+
+/* ── Buttons ── */
+.btn{
+  padding:10px 22px;
+  border-radius:var(--r);
+  border:none;cursor:pointer;
+  font-family:var(--ff-mono);
+  font-size:10px;
+  font-weight:600;
+  letter-spacing:1.5px;
+  text-transform:uppercase;
+  transition:all .15s;
+}
+.btn-primary{
+  background:var(--cyan);
+  color:#000;
+}
+.btn-primary:hover{background:var(--cyan-bright);box-shadow:0 0 16px rgba(0,212,255,.5)}
+.btn-secondary{
+  background:transparent;
+  color:var(--text);
+  border:1px solid var(--wire);
+}
+.btn-secondary:hover{border-color:var(--cyan-dim);color:var(--cyan)}
+.btn-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.err-msg{font-family:var(--ff-mono);font-size:10px;color:var(--red)}
+
+/* ── Story section ── */
+.story{
+  background:var(--surface);
+  border:1px solid var(--edge);
+  border-radius:var(--r3);
+  padding:32px;
+  margin-bottom:20px;
+  animation:fadeUp .4s ease;
+  position:relative;
+  overflow:hidden;
+}
+.story::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;
+  height:1px;
+  background:linear-gradient(90deg,var(--cyan),transparent 50%);
+  opacity:.6;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.story-headline{
+  font-family:var(--ff-display);
+  font-size:22px;
+  font-weight:700;
+  letter-spacing:2px;
+  color:var(--text-bright);
+  margin-bottom:8px;
+  line-height:1.2;
+}
+.story-sub{font-size:12px;color:var(--muted);margin-bottom:24px;font-style:italic;}
+
+/* ── Stat grid ── */
+.stat-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;}
+.stat{
+  background:var(--lift);
+  border:1px solid var(--edge);
+  border-radius:var(--r2);
+  padding:14px 16px;
+  min-width:110px;
+  flex:1;
+  position:relative;
+  overflow:hidden;
+}
+.stat::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;
+  width:2px;height:100%;
+  background:var(--cyan);
+  opacity:.3;
+}
+.stat .lbl{
+  font-family:var(--ff-mono);
+  font-size:7px;
+  color:var(--muted);
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.stat .val{
+  font-family:var(--ff-display);
+  font-size:22px;
+  font-weight:600;
+  letter-spacing:1px;
+  line-height:1;
+  color:var(--text-bright);
+}
+.stat .unit{font-size:10px;color:var(--muted);font-family:var(--ff-body);font-weight:300;margin-left:3px}
+.val.amber{color:var(--orange)}
+.val.green{color:var(--green)}
+.val.red{color:var(--red)}
+.val.blue{color:var(--cyan)}
+.val.purple{color:var(--violet)}
+.val.mono{font-family:var(--ff-mono);font-size:10px;word-break:break-all}
+
+/* ── Warnings ── */
+.warn-strip{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
+.warn{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:12px 16px;
+  border-radius:var(--r2);
+  border-left:2px solid;
+  font-size:12px;
+  animation:slideIn .3s ease;
+}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.warn.w-rbf{background:rgba(0,212,255,.05);border-color:var(--cyan);color:var(--cyan)}
+.warn.w-fee{background:rgba(255,77,106,.05);border-color:var(--red);color:var(--red)}
+.warn.w-dust{background:rgba(255,153,64,.05);border-color:var(--orange);color:var(--orange)}
+.warn.w-unk{background:rgba(255,77,106,.05);border-color:var(--red);color:var(--red)}
+.warn-ico{font-size:14px;flex-shrink:0;margin-top:1px}
+.warn strong{display:block;margin-bottom:2px}
+.warn p{color:rgba(200,220,240,0.7);font-size:11px;margin:0}
+
+/* ── SVG Flow Diagram ── */
+.flow-wrap{
+  background:var(--abyss);
+  border:1px solid var(--edge);
+  border-radius:var(--r3);
+  padding:24px;
+  margin-bottom:20px;
+  overflow:hidden;
+}
+.flow-title{
+  font-family:var(--ff-mono);
+  font-size:8px;
+  color:var(--muted);
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+  margin-bottom:16px;
+}
+#flow-svg{width:100%;overflow:visible;display:block}
+
+/* ── Collapsible sections ── */
+.sect{
+  background:var(--surface);
+  border:1px solid var(--edge);
+  border-radius:var(--r3);
+  margin-bottom:10px;
+  overflow:hidden;
+}
+.sect-hdr{
+  padding:13px 20px;
+  display:flex;align-items:center;
+  cursor:pointer;
+  gap:12px;
+  border-bottom:1px solid transparent;
+  transition:background .15s;
+}
+.sect-hdr:hover{background:var(--lift)}
+.sect-hdr.open{border-bottom-color:var(--edge)}
+.sect-hdr h3{
+  font-family:var(--ff-mono);
+  font-size:10px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  flex:1;
+  color:var(--text);
+}
+.sect-hdr .ico{color:var(--cyan);font-size:12px}
+.chevron{font-size:10px;color:var(--muted);transition:.2s;}
+.sect-hdr.open .chevron{transform:rotate(180deg)}
+.sect-body{display:none;padding:20px}
+.sect-body.open{display:block}
+
+/* ── Tables ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{
+  text-align:left;padding:8px 12px;
+  background:var(--lift);
+  color:var(--muted);
+  font-family:var(--ff-mono);
+  font-size:7px;
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+  border-bottom:1px solid var(--edge);
+}
+td{padding:10px 12px;border-bottom:1px solid var(--faint);vertical-align:top;}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--cyan-ghost)}
+.mono{font-family:var(--ff-mono);font-size:10px;word-break:break-all;color:var(--muted)}
+.addr{font-family:var(--ff-mono);font-size:10px;color:var(--cyan)}
+
+/* ── Pill badges ── */
+.pill{
+  display:inline-block;
+  padding:2px 6px;
+  border-radius:2px;
+  font-family:var(--ff-mono);
+  font-size:8px;
+  font-weight:600;
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.pill-p2pkh{background:rgba(0,212,255,.12);color:var(--cyan)}
+.pill-p2sh{background:rgba(167,139,250,.12);color:var(--violet)}
+.pill-p2wpkh{background:rgba(0,255,157,.12);color:var(--green)}
+.pill-p2wsh{background:rgba(0,255,157,.08);color:#00cc7a}
+.pill-p2tr{background:rgba(0,212,255,.08);color:var(--cyan-bright)}
+.pill-op_return{background:rgba(58,107,153,.15);color:var(--muted)}
+.pill-unknown{background:rgba(255,77,106,.12);color:var(--red)}
+.pill-p2tr_keypath{background:rgba(0,212,255,.1);color:var(--cyan-bright)}
+.pill-p2tr_scriptpath{background:rgba(0,153,187,.1);color:var(--cyan-dim)}
+.pill-p2sh-p2wpkh{background:rgba(0,255,157,.08);color:#00cc7a}
+.pill-p2sh-p2wsh{background:rgba(0,255,157,.06);color:#00aa66}
+
+/* ── Weight bar ── */
+.wbar-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.wbar-item .label{font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;}
+.wbar-item .bar{height:20px;border-radius:2px;overflow:hidden;display:flex}
+.wbar-item .bar-fill{transition:width 1s cubic-bezier(.4,0,.2,1)}
+.wbar-nw-seg{background:var(--cyan);opacity:.6}
+.wbar-w-seg{background:var(--green);opacity:.6}
+.savings-badge{display:inline-block;padding:3px 10px;background:rgba(0,255,157,.08);border:1px solid rgba(0,255,157,.25);border-radius:var(--r);font-family:var(--ff-mono);font-size:10px;color:var(--green);}
+
+/* ── Tooltip ── */
+[data-tip]{position:relative;cursor:help}
+[data-tip]::after{
+  content:attr(data-tip);
+  position:absolute;
+  bottom:calc(100% + 6px);
+  left:50%;transform:translateX(-50%);
+  background:var(--lift);
+  border:1px solid var(--wire);
+  color:var(--text);
+  font-family:var(--ff-body);
+  font-size:11px;
+  line-height:1.4;
+  padding:6px 10px;
+  border-radius:var(--r);
+  white-space:normal;
+  max-width:260px;
+  text-align:center;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .15s;
+  z-index:999;
+}
+[data-tip]:hover::after{opacity:1}
+
+/* ── ASM code block ── */
+.asm-block{
+  background:var(--void);
+  border:1px solid var(--edge);
+  border-radius:var(--r);
+  padding:12px;
+  font-family:var(--ff-mono);
+  font-size:10px;
+  color:var(--muted);
+  overflow-x:auto;
+  white-space:pre-wrap;
+  word-break:break-all;
+  margin-top:6px;
+  line-height:1.8;
+}
+.asm-op{color:var(--cyan)}
+.asm-data{color:var(--text)}
+.asm-special{color:var(--green)}
+
+/* ── Spinner ── */
+.loading{text-align:center;padding:60px;color:var(--muted);display:none;animation:fadeUp .3s ease;}
+.spin-wrap{margin-bottom:12px}
+.spin{width:32px;height:32px;border:2px solid var(--wire);border-top-color:var(--cyan);border-radius:50%;animation:sp .7s linear infinite;margin:0 auto;}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading p{font-family:var(--ff-mono);font-size:9px;letter-spacing:3px;text-transform:uppercase}
+
+/* ── Error ── */
+.errbox{background:rgba(255,77,106,.04);border:1px solid rgba(255,77,106,.25);border-left:2px solid var(--red);border-radius:var(--r2);padding:20px;margin-bottom:20px;}
+.errbox h3{font-family:var(--ff-display);font-size:16px;font-weight:600;letter-spacing:2px;color:var(--red);margin-bottom:8px;}
+.errbox pre{font-family:var(--ff-mono);font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all;}
+
+/* ── Block cards ── */
+.block-card{background:var(--surface);border:1px solid var(--edge);border-radius:var(--r3);margin-bottom:16px;overflow:hidden;animation:fadeUp .35s ease;}
+.block-hdr{padding:18px 24px;cursor:pointer;display:grid;grid-template-columns:1fr auto;align-items:center;gap:16px;transition:background .15s;}
+.block-hdr:hover{background:var(--lift)}
+.block-hash{font-family:var(--ff-mono);font-size:10px;color:var(--cyan);margin-bottom:6px;}
+.block-pills{display:flex;gap:16px;flex-wrap:wrap}
+.bpill{font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:.5px;}
+.bpill b{color:var(--text)}
+.block-chevron{font-family:var(--ff-mono);font-size:10px;color:var(--muted);transition:.2s;}
+.block-body{display:none;border-top:1px solid var(--edge);padding:20px 24px;}
+.block-stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
+.script-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px}
+.script-chip{font-family:var(--ff-mono);font-size:8px;padding:3px 8px;border-radius:2px;border:1px solid var(--edge);color:var(--muted);}
+.divider{border:none;border-top:1px solid var(--faint);margin:24px 0;}
+.tx-row{padding:10px 0;border-bottom:1px solid var(--faint);display:grid;grid-template-columns:80px 1fr 100px 100px 80px;gap:12px;align-items:center;cursor:pointer;transition:background .1s;}
+.tx-row:hover{background:var(--cyan-ghost);border-radius:var(--r)}
+.tx-row:last-child{border-bottom:none}
+.tx-detail{display:none;background:var(--void);border:1px solid var(--faint);border-radius:var(--r2);padding:16px;margin:8px 0 16px;font-size:11px;}
+.tx-detail.open{display:block}
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOATING CHATBOT — GLACIAL
+═══════════════════════════════════════════════════════════════ */
+
+#chat-fab {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 500;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--cyan);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 0 rgba(0,212,255,.6), 0 8px 28px rgba(0,0,0,.7);
+  animation: fab-pulse 3s infinite;
+  transition: transform .2s cubic-bezier(.4,0,.2,1), background .15s;
+}
+#chat-fab:hover { transform: scale(1.1); background: var(--cyan-bright); box-shadow: 0 0 20px rgba(0,212,255,.5), 0 8px 28px rgba(0,0,0,.7); }
+#chat-fab svg { width: 24px; height: 24px; fill: #000; }
+@keyframes fab-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0,212,255,.5), 0 8px 28px rgba(0,0,0,.7); }
+  70%  { box-shadow: 0 0 0 14px rgba(0,212,255,0), 0 8px 28px rgba(0,0,0,.7); }
+  100% { box-shadow: 0 0 0 0 rgba(0,212,255,0), 0 8px 28px rgba(0,0,0,.7); }
+}
+
+#fab-ctx-dot {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--green);
+  border: 2px solid var(--void);
+  box-shadow: 0 0 8px var(--green);
+  display: none;
+  animation: pulse 2s infinite;
+}
+#fab-ctx-dot.on { display: block; }
+
+#chat-panel {
+  position: fixed;
+  bottom: 96px;
+  right: 28px;
+  z-index: 499;
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  max-height: 78vh;
+  background: var(--deep);
+  border: 1px solid var(--edge);
+  border-radius: var(--r3);
+  box-shadow: 0 40px 100px rgba(0,0,0,.8), 0 0 0 1px rgba(0,212,255,.1), 0 0 40px rgba(0,100,200,.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(20px) scale(.96);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .25s cubic-bezier(.4,0,.2,1), opacity .25s;
+}
+#chat-panel.open {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: all;
+}
+
+.cp-hdr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(4,13,26,.8);
+  border-bottom: 1px solid var(--edge);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.cp-hdr::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--cyan), rgba(0,212,255,.2), transparent);
+}
+.cp-title {
+  font-family: var(--ff-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--cyan);
+  line-height: 1;
+  text-shadow: 0 0 16px rgba(0,212,255,.4);
+}
+.cp-sub {
+  font-family: var(--ff-mono);
+  font-size: 7px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+.cp-ctx-pill {
+  margin-left: auto;
+  font-family: var(--ff-mono);
+  font-size: 7px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  background: rgba(0,255,157,.08);
+  border: 1px solid rgba(0,255,157,.2);
+  color: var(--green);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  display: none;
+}
+.cp-ctx-pill.on { display: inline; }
+.cp-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+  transition: color .15s;
+  flex-shrink: 0;
+}
+.cp-close:hover { color: var(--text); }
+
+#cp-config {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--edge);
+  background: rgba(2,8,16,.5);
+  flex-shrink: 0;
+}
+.cp-config-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.cp-config-row:last-child { margin-bottom: 0; }
+
+.prov-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--abyss);
+  border: 1px solid var(--wire);
+  border-radius: var(--r);
+  padding: 3px;
+  flex-shrink: 0;
+}
+.prov-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 2px;
+  font-family: var(--ff-mono);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+  transition: all .15s;
+}
+.prov-btn.on { background: var(--cyan); color: #000; font-weight: 700; }
+.prov-btn:hover:not(.on) { color: var(--text); }
+
+#cp-model {
+  flex: 1;
+  background: var(--abyss);
+  border: 1px solid var(--wire);
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: var(--ff-mono);
+  font-size: 9px;
+  padding: 7px 9px;
+  outline: none;
+  cursor: pointer;
+}
+#cp-model optgroup { background: var(--deep); color: var(--cyan); font-size: 9px; }
+#cp-model option { background: var(--deep); color: var(--text); }
+
+#cp-key {
+  flex: 1;
+  background: var(--abyss);
+  border: 1px solid var(--wire);
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  padding: 7px 10px;
+  outline: none;
+  transition: border .15s;
+  min-width: 0;
+}
+#cp-key:focus { border-color: var(--cyan-dim); box-shadow: 0 0 0 2px var(--cyan-glow); }
+.cp-key-status { font-family: var(--ff-mono); font-size: 7px; letter-spacing: 1px; padding: 2px 0; }
+
+#cfg-toggle {
+  font-family: var(--ff-mono);
+  font-size: 8px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 4px;
+  transition: color .15s;
+  flex-shrink: 0;
+}
+#cfg-toggle:hover { color: var(--cyan); }
+
+#cp-ctx-strip {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: rgba(0,212,255,.03);
+  border-bottom: 1px solid rgba(0,212,255,.1);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+#cp-ctx-strip.on { display: flex; }
+.ctx-glow { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 6px var(--cyan); flex-shrink: 0; }
+.ctx-lbl { font-family: var(--ff-mono); font-size: 7px; color: var(--cyan); letter-spacing: 1.5px; text-transform: uppercase; }
+.ctx-text { color: var(--text); font-size: 9px; }
+.ctx-clear { margin-left: auto; font-family: var(--ff-mono); font-size: 7px; color: var(--muted); cursor: pointer; letter-spacing: .5px; transition: color .15s; white-space: nowrap; }
+.ctx-clear:hover { color: var(--red); }
+
+.cp-msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+.cp-msgs::-webkit-scrollbar { width: 2px; }
+.cp-msgs::-webkit-scrollbar-thumb { background: var(--wire); border-radius: 2px; }
+
+.cp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1;
+  padding: 24px;
+  text-align: center;
+}
+.cp-empty-icon {
+  font-family: var(--ff-display);
+  font-size: 28px;
+  font-weight:700;
+  letter-spacing: 5px;
+  color: var(--cyan);
+  opacity: .15;
+}
+.cp-empty p { font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 280px; }
+
+.msg {
+  display: flex;
+  gap: 8px;
+  animation: msgIn .2s ease;
+  max-width: 92%;
+}
+@keyframes msgIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+.msg.user { align-self: flex-end; flex-direction: row-reverse; }
+.msg-av {
+  width: 26px; height: 26px;
+  border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ff-display); font-size: 10px; font-weight:700;
+  flex-shrink: 0;
+  letter-spacing: 1px;
+}
+.msg-av.ai { background: var(--cyan); color: #000; }
+.msg-av.user { background: var(--lift); border: 1px solid var(--wire); color: var(--muted); font-size: 8px; font-family: var(--ff-mono); }
+.msg-body {
+  background: var(--surface);
+  border: 1px solid var(--wire);
+  border-radius: var(--r2);
+  padding: 9px 13px;
+  font-size: 12px;
+  line-height: 1.65;
+  word-break: break-word;
+  color: var(--text);
+}
+.msg.user .msg-body {
+  background: rgba(0,212,255,.05);
+  border-color: rgba(0,212,255,.15);
+}
+.msg-body code { font-family: var(--ff-mono); font-size: 9px; background: var(--void); border: 1px solid var(--faint); padding: 1px 4px; border-radius: 2px; color: var(--cyan); }
+.msg-body strong { color: var(--cyan-bright); font-weight: 600; }
+.msg-body em { color: var(--muted); font-style: italic; }
+.msg-body ul { margin: 6px 0 6px 14px; }
+.msg-body li { margin-bottom: 2px; }
+.msg-body.err { background: rgba(255,77,106,.05); border-color: rgba(255,77,106,.2); color: var(--red); }
+
+.typing-dots { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
+.typing-dots span { width: 5px; height: 5px; border-radius: 50%; background: var(--cyan); opacity: .3; animation: dot .9s infinite; }
+.typing-dots span:nth-child(2) { animation-delay: .2s; }
+.typing-dots span:nth-child(3) { animation-delay: .4s; }
+@keyframes dot { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:1;transform:scale(1)} }
+
+.cp-prompts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 8px 14px 0;
+  flex-shrink: 0;
+}
+.qp-btn {
+  font-family: var(--ff-mono);
+  font-size: 7px;
+  padding: 3px 8px;
+  border: 1px solid var(--wire);
+  border-radius: 2px;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: .5px;
+  transition: all .15s;
+  background: transparent;
+}
+.qp-btn:hover { border-color: var(--cyan-dim); color: var(--cyan); background: var(--cyan-ghost); }
+
+.cp-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--edge);
+  background: var(--abyss);
+  flex-shrink: 0;
+}
+.cp-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--wire);
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: var(--ff-body);
+  font-size: 12px;
+  padding: 8px 11px;
+  outline: none;
+  resize: none;
+  height: 38px;
+  max-height: 110px;
+  overflow-y: auto;
+  line-height: 1.5;
+  transition: border .15s;
+}
+.cp-input:focus { border-color: var(--cyan-dim); box-shadow: 0 0 0 2px var(--cyan-glow); }
+.cp-send {
+  width: 38px; height: 38px;
+  background: var(--cyan);
+  border: none; border-radius: var(--r);
+  color: #000; font-size: 15px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.cp-send:hover { background: var(--cyan-bright); box-shadow: 0 0 12px rgba(0,212,255,.5); }
+.cp-send:disabled { background: var(--wire); color: var(--muted); cursor: not-allowed; }
+
+@media(max-width:700px){
+  .grid2,.grid3{grid-template-columns:1fr}
+  .wrap{padding:16px}
+  .stat-row{gap:8px}
+  .stat .val{font-size:18px}
+  .tx-row{grid-template-columns:60px 1fr 80px}
+  .tx-row .hide-sm{display:none}
+  #chat-panel{width:calc(100vw - 32px);right:16px;bottom:80px;}
+  #chat-fab{bottom:20px;right:16px;}
+}
+
+/* ── Streaming cursor & bubble ── */
+.stream-cursor{
+  display:inline-block;
+  width:2px;height:13px;
+  background:var(--cyan);
+  border-radius:1px;
+  margin-left:2px;
+  vertical-align:middle;
+  animation:blink .7s steps(1) infinite;
+  box-shadow:0 0 6px var(--cyan);
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.msg.streaming .msg-body{
+  border-color:rgba(0,212,255,.25);
+  background:rgba(0,212,255,.04);
+}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div>
+    <div class="logo">CHAIN LENS</div>
+    <div class="logo-sub">Bitcoin Transaction Analyzer</div>
+  </div>
+  <div class="hdr-right">
+    <div class="status-dot" title="Service online"></div>
+    <div class="hdr-badge">MAINNET</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab on" onclick="tab('tx',this)">Transaction</button>
+  <button class="tab" onclick="tab('block',this)">Block Files</button>
+</div>
+
+<div class="wrap">
+
+  <!-- TRANSACTION PANEL -->
+  <div class="panel on" id="p-tx">
+    <div class="input-card">
+      <div class="card-title"><span class="ico">⟁</span> Load Transaction</div>
+      <div class="grid2">
+        <div>
+          <div class="field">
+            <label>Fixture JSON <span class="tip" data-tip="Paste the full fixture JSON containing network, raw_tx, and prevouts">?</span></label>
+            <textarea id="tj" rows="8" placeholder='{"network":"mainnet","raw_tx":"02000000...","prevouts":[]}'></textarea>
+          </div>
+        </div>
+        <div>
+          <div class="field">
+            <label>— or — Raw TX Hex</label>
+            <textarea id="th" rows="4" placeholder="0200000001..."></textarea>
+          </div>
+          <div class="field">
+            <label>Prevouts <span class="tip" data-tip="The previous outputs being spent. Required to calculate fees.">?</span></label>
+            <textarea id="tp" rows="3" placeholder='[{"txid":"...","vout":0,"value_sats":100000,"script_pubkey_hex":"0014..."}]'></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="runTx()">Analyze →</button>
+        <button class="btn btn-secondary" onclick="loadDemo()">Load Demo</button>
+        <span class="err-msg" id="tx-err"></span>
+      </div>
+    </div>
+    <div class="loading" id="tx-load"><div class="spin-wrap"><div class="spin"></div></div><p>Analyzing transaction…</p></div>
+    <div id="tx-out"></div>
+  </div>
+
+  <!-- BLOCK PANEL -->
+  <div class="panel" id="p-block">
+    <div class="input-card">
+      <div class="card-title"><span class="ico">⬡</span> Load Block Files</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:20px">Upload raw Bitcoin Core block data files. All three are required. Files are processed locally — nothing is uploaded to external servers.</p>
+      <div class="grid3">
+        <div class="field">
+          <label>blk*.dat <span class="tip" data-tip="The block data file containing serialized Bitcoin blocks">?</span></label>
+          <input type="file" id="bf-blk" accept=".dat">
+        </div>
+        <div class="field">
+          <label>rev*.dat <span class="tip" data-tip="The undo/revert data file with previous output information">?</span></label>
+          <input type="file" id="bf-rev" accept=".dat">
+        </div>
+        <div class="field">
+          <label>xor.dat <span class="tip" data-tip="XOR obfuscation key used by Bitcoin Core v28+">?</span></label>
+          <input type="file" id="bf-xor" accept=".dat">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="runBlock()">Parse Blocks →</button>
+        <span class="err-msg" id="blk-err"></span>
+      </div>
+    </div>
+    <div class="loading" id="blk-load"><div class="spin-wrap"><div class="spin"></div></div><p>Parsing block data…</p></div>
+    <div id="blk-out"></div>
+  </div>
+
+</div><!-- /wrap -->
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     FLOATING CHAT FAB
+═══════════════════════════════════════════════════════════════ -->
+<button id="chat-fab" onclick="toggleChat()" title="AI Blockchain Assistant">
+  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.37 5.07L2 22l4.93-1.37C8.42 21.5 10.15 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-1 13H7v-2h4v2zm6 0h-4v-2h4v2zm0-4H7V9h10v2z"/>
+  </svg>
+  <span id="fab-ctx-dot"></span>
+</button>
+
+
+<!-- ═══════════════════════════════════════════════════════════════
+     CHAT PANEL
+═══════════════════════════════════════════════════════════════ -->
+<div id="chat-panel">
+
+  <!-- Header -->
+  <div class="cp-hdr">
+    <div>
+      <div class="cp-title">CHAIN AI</div>
+      <div class="cp-sub">Blockchain Analyst · Bitcoin Only</div>
+    </div>
+    <span class="cp-ctx-pill" id="cp-ctx-pill">TX LOADED</span>
+    <button id="cfg-toggle" onclick="toggleConfig()" title="API Settings">⚙ API</button>
+    <button class="cp-close" onclick="toggleChat()">✕</button>
+  </div>
+
+  <!-- Config Section (collapsible) -->
+  <div id="cp-config">
+    <div class="cp-config-row">
+      <div class="prov-toggle">
+        <button class="prov-btn on" id="prov-openai" onclick="setProvider('openai')">OpenAI</button>
+        <button class="prov-btn" id="prov-gemini" onclick="setProvider('gemini')">Gemini</button>
+      </div>
+      <select id="cp-model">
+        <optgroup label="GPT-4o" id="oai-grp">
+          <option value="gpt-4o-mini">gpt-4o-mini</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4-turbo">gpt-4-turbo</option>
+        </optgroup>
+        <optgroup label="Gemini 3.x" id="gem-grp-3" style="display:none">
+          <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+          <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
+          <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+        </optgroup>
+        <optgroup label="Gemini 2.5" id="gem-grp-25" style="display:none">
+          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+        </optgroup>
+        <optgroup label="Gemini 2.0" id="gem-grp-20" style="display:none">
+          <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+          <option value="gemini-2.0-flash-001">gemini-2.0-flash-001</option>
+          <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+          <option value="gemini-2.0-flash-lite-001">gemini-2.0-flash-lite-001</option>
+        </optgroup>
+        <optgroup label="Gemma 3" id="gem-grp-gemma" style="display:none">
+          <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+          <option value="gemma-3-12b-it">gemma-3-12b-it</option>
+          <option value="gemma-3-4b-it">gemma-3-4b-it</option>
+          <option value="gemma-3-1b-it">gemma-3-1b-it</option>
+          <option value="gemma-3n-e4b-it">gemma-3n-e4b-it</option>
+          <option value="gemma-3n-e2b-it">gemma-3n-e2b-it</option>
+        </optgroup>
+        <optgroup label="Aliases" id="gem-grp-alias" style="display:none">
+          <option value="gemini-pro-latest">gemini-pro-latest</option>
+          <option value="gemini-flash-latest">gemini-flash-latest</option>
+          <option value="gemini-flash-lite-latest">gemini-flash-lite-latest</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="cp-config-row">
+      <input type="password" id="cp-key" placeholder="Paste API key — sk-... or AIza..." autocomplete="off" oninput="onKeyInput()"/>
+    </div>
+    <div class="cp-config-row">
+      <span class="cp-key-status" id="cp-key-status"></span>
+    </div>
+  </div>
+
+  <!-- Context strip -->
+  <div id="cp-ctx-strip">
+    <span class="ctx-glow"></span>
+    <span class="ctx-lbl">Context</span>
+    <span class="ctx-text" id="cp-ctx-text"></span>
+    <span class="ctx-clear" onclick="clearCtx()">✕ clear</span>
+  </div>
+
+  <!-- Messages -->
+  <div class="cp-msgs" id="cp-msgs">
+    <div class="cp-empty" id="cp-empty">
+      <div class="cp-empty-icon">AI</div>
+      <p>Ask anything about Bitcoin — transactions, blocks, scripts, fees, SegWit, Taproot, timelocks and more.</p>
+      <p style="margin-top:6px;font-size:10px">Analyze a transaction first and I'll answer specific questions about it.</p>
+    </div>
+  </div>
+
+  <!-- Quick prompts -->
+  <div class="cp-prompts" id="cp-prompts">
+    <button class="qp-btn" onclick="qp('What is a UTXO?')">What is UTXO?</button>
+    <button class="qp-btn" onclick="qp('How do Bitcoin fees work?')">Fee mechanics</button>
+    <button class="qp-btn" onclick="qp('What is SegWit?')">SegWit</button>
+    <button class="qp-btn" onclick="qp('Explain RBF')">RBF</button>
+    <button class="qp-btn" onclick="qp('What is Taproot?')">Taproot</button>
+    <button class="qp-btn" id="qp-tx-1" style="display:none" onclick="qp('Explain this transaction in simple terms')">Explain this TX</button>
+    <button class="qp-btn" id="qp-tx-2" style="display:none" onclick="qp('Is the fee rate on this transaction reasonable?')">Fee rate OK?</button>
+    <button class="qp-btn" id="qp-tx-3" style="display:none" onclick="qp('What script types are used and what do they mean?')">Script types?</button>
+    <button class="qp-btn" id="qp-tx-4" style="display:none" onclick="qp('Is this transaction safe to accept?')">Safe to accept?</button>
+  </div>
+
+  <!-- Input -->
+  <div class="cp-input-row">
+    <textarea class="cp-input" id="cp-input" placeholder="Ask about Bitcoin…" rows="1"
+      onkeydown="chatKey(event)" oninput="autoResize(this)"></textarea>
+    <button class="cp-send" id="cp-send" onclick="sendChat()" disabled title="Enter API key to enable">➤</button>
+  </div>
+
+</div><!-- /chat-panel -->
+
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const show = (id,v) => $(id).style.display = v ? 'block' : 'none';
+const fmt  = n => Number(n??0).toLocaleString();
+const btc  = n => (Number(n)/1e8).toFixed(8);
+const hex8 = n => '0x'+Number(n).toString(16).padStart(8,'0').toUpperCase();
+const short = (s,n=8) => s ? s.slice(0,n)+'…'+s.slice(-6) : '—';
+const shortAddr = a => a ? `<span class="addr" title="${a}">${short(a,10)}</span>` : `<span style="color:var(--muted)">—</span>`;
+function pill(type){ const t=(type||'unknown').replace(/[^a-z0-9_-]/gi,''); return `<span class="pill pill-${t}">${t.toUpperCase()}</span>`; }
+function toggle(hdr){ hdr.classList.toggle('open'); hdr.nextElementSibling.classList.toggle('open'); }
+function tab(id,btn){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on')); document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on')); btn.classList.add('on'); $('p-'+id).classList.add('on'); }
+
+// ═══════════════════════════════════════════════════════════════
+// DEMO
+// ═══════════════════════════════════════════════════════════════
+function loadDemo(){
+  $('tj').value = JSON.stringify({
+    "network":"mainnet",
+    "raw_tx":"02000000000102a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10000000000feffffffb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b20200000000fdffffff0210270000000000001600141313131313131313131313131313131313131313e02e00000000000022512014141414141414141414141414141414141414141414141414141414141414140247eed60c73dec1a4307bb6ade00521a58737c9e184e5f42329a9d82f63456c886ade14624e2f582c43767fffc7d06a49772d53847b711e86cb86cb46d018d9363b01f417e074a55421688bc8d5d9d8ab2ef6065ad8285a8faf92ca89371c9eb7478ec091bb36914b90440000000000",
+    "prevouts":[
+      {"txid":"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1","vout":0,"value_sats":15000,"script_pubkey_hex":"00141515151515151515151515151515151515151515"},
+      {"txid":"b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","vout":2,"value_sats":9000,"script_pubkey_hex":"76a914161616161616161616161616161616161616161688ac"}
+    ]
+  }, null, 2);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ANALYZE TX
+// ═══════════════════════════════════════════════════════════════
+async function runTx(){
+  const errEl = $('tx-err');
+  errEl.textContent = '';
+  let fixture;
+  const tj = $('tj').value.trim();
+  const th = $('th').value.trim();
+  if(tj){ try{ fixture=JSON.parse(tj); }catch(e){ errEl.textContent='JSON error: '+e.message; return; } }
+  else if(th){
+    let prevouts=[];
+    const tp=$('tp').value.trim();
+    if(tp){ try{ prevouts=JSON.parse(tp); }catch(e){ errEl.textContent='Bad prevouts JSON'; return; } }
+    fixture={network:'mainnet',raw_tx:th,prevouts};
+  } else { errEl.textContent='Paste fixture JSON or raw TX hex.'; return; }
+
+  show('tx-load',true); $('tx-out').innerHTML='';
+  try{
+    const resp=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(fixture)});
+    const data=await resp.json();
+    show('tx-load',false);
+    $('tx-out').innerHTML=data.ok?renderTx(data):renderErr(data.error);
+    if(data.ok){ drawFlow(data); setAiCtx(data); }
+  }catch(e){ show('tx-load',false); errEl.textContent='Network error: '+e.message; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER TRANSACTION
+// ═══════════════════════════════════════════════════════════════
+function renderTx(d){
+  const fee=d.fee_sats, totalIn=d.total_input_sats, totalOut=d.total_output_sats;
+  const isCoinbase=d.vin?.length===1&&d.vin[0]?.txid==='0'.repeat(64);
+  const warnDefs={
+    RBF_SIGNALING:['w-rbf','🔄','RBF — Replaceable Before Confirmation','This transaction signals BIP125 replace-by-fee. It can be fee-bumped while unconfirmed and is not final until mined.'],
+    HIGH_FEE:['w-fee','💸','Very High Fee — Double Check','Fee exceeds 1,000,000 sats or 200 sat/vB. This is unusually expensive. Verify before broadcasting.'],
+    ELEVATED_FEE:['w-fee','📈','Elevated Fee Rate','Fee rate is above 50 sat/vB — well above typical. May be intentional for priority confirmation.'],
+    LOW_FEE:['w-dust','🐢','Low Fee — Risk of Getting Stuck','Fee rate is below 2 sat/vB. This transaction may take a very long time to confirm or be dropped from the mempool.'],
+    DUST_OUTPUT:['w-dust','⚠','Dust Output','An output is below 546 sats — the Bitcoin network\'s dust limit. It may be uneconomical to spend later.'],
+    CONSOLIDATION:['w-rbf','🔗','Input Consolidation Pattern','More inputs than outputs — typical UTXO consolidation. Efficient, but links addresses together on-chain.'],
+    MANY_OUTPUTS:['w-unk','📤','Large Fan-Out Transaction','Many outputs detected — typical of batch payments, payroll, or mixing services.'],
+    MIXED_INPUT_TYPES:['w-rbf','🔀','Mixed Input Script Types','Inputs use different script types, which can reduce privacy by linking addresses of different types.'],
+    UNKNOWN_OUTPUT_SCRIPT:['w-unk','❓','Unknown Output Script','At least one output uses an unrecognised locking script pattern.'],
+  };
+
+  // Client-side heuristic warnings (augment server warnings)
+  const serverCodes = new Set((d.warnings||[]).map(w=>w.code));
+  const extraWarns = [];
+  const feeRate = parseFloat(d.fee_rate_sat_vb) || 0;
+  const vinLen  = (d.vin||[]).length;
+  const voutLen = (d.vout||[]).length;
+  const inputTypes = [...new Set((d.vin||[]).map(v=>v.script_type).filter(Boolean))];
+
+  if(!serverCodes.has('HIGH_FEE') && feeRate > 50)
+    extraWarns.push({code:'ELEVATED_FEE'});
+  if(feeRate > 0 && feeRate < 2 && !isCoinbase)
+    extraWarns.push({code:'LOW_FEE'});
+  if(vinLen > voutLen*2 && vinLen >= 3)
+    extraWarns.push({code:'CONSOLIDATION'});
+  if(voutLen >= 10)
+    extraWarns.push({code:'MANY_OUTPUTS'});
+  if(inputTypes.length > 1)
+    extraWarns.push({code:'MIXED_INPUT_TYPES'});
+
+  const allWarns = [...(d.warnings||[]), ...extraWarns];
+  const warnsHtml=allWarns.map(w=>{ const[cls,ico,title,msg]=warnDefs[w.code]||['w-unk','⚠',w.code,'']; return `<div class="warn ${cls}"><span class="warn-ico">${ico}</span><div><strong>${title}</strong><p>${msg}</p></div></div>`; }).join('');
+  const inCount=d.vin?.length||0, outCount=d.vout?.length||0;
+  const segwitLabel=d.segwit?'SegWit':'Legacy';
+  const headline=isCoinbase?'Coinbase Transaction — New Bitcoin Minted':`${inCount} Input${inCount!==1?'s':''} → ${outCount} Output${outCount!==1?'s':''} — ${segwitLabel}`;
+  const subline=isCoinbase?'This is the first transaction in a block, created by the miner to collect the block reward.':`${fmt(fee)} sats paid in fees (${d.fee_rate_sat_vb} sat/vB) · ${d.segwit?'SegWit transaction with witness discount':'Legacy transaction, no witness discount'}`;
+
+  let segwitHtml='';
+  if(d.segwit&&d.segwit_savings){
+    const s=d.segwit_savings;
+    const pNW=Math.round(s.non_witness_bytes/s.total_bytes*100), pW=100-pNW;
+    segwitHtml=`<div class="sect"><div class="sect-hdr open" onclick="toggle(this)"><span class="ico">⚡</span><h3>SegWit Witness Discount</h3><span class="chevron">▼</span></div><div class="sect-body open"><p style="font-size:12px;color:var(--muted);margin-bottom:16px"><span data-tip="Segregated Witness separates signature data. Witness bytes count ¼ the weight of normal bytes.">SegWit</span> introduced a witness discount: signature data weighs <strong>1 unit/byte</strong> instead of 4.</p><div class="wbar-compare"><div class="wbar-item"><div class="label">Actual weight (with discount)</div><div class="bar" style="background:var(--faint)"><div class="bar-fill wbar-nw-seg" style="width:${pNW}%"></div><div class="bar-fill wbar-w-seg" style="width:${pW}%"></div></div><div style="font-family:var(--ff-mono);font-size:10px;color:var(--text-bright);margin-top:4px">${fmt(s.weight_actual)} wu</div></div><div class="wbar-item"><div class="label">Hypothetical legacy weight</div><div class="bar" style="background:var(--faint)"><div class="bar-fill wbar-nw-seg" style="width:100%;opacity:.4"></div></div><div style="font-family:var(--ff-mono);font-size:10px;color:var(--muted);margin-top:4px">${fmt(s.weight_if_legacy)} wu</div></div></div><div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span class="savings-badge">Saves ${s.savings_pct}% block space</span><span style="font-size:11px;color:var(--muted)">Non-witness: ${s.non_witness_bytes}B · Witness: ${s.witness_bytes}B · Total: ${s.total_bytes}B</span></div></div></div>`;
+  }
+
+  const vinRows=(d.vin||[]).map((v,i)=>{
+    const rtl=v.relative_timelock;
+    const rtlHtml=rtl?.enabled?`<span style="color:var(--cyan);font-family:var(--ff-mono);font-size:9px">${rtl.value} ${rtl.type}</span>`:`<span style="color:var(--faint)">—</span>`;
+    const rbfCell=v.sequence<0xFFFFFFFE?`<span style="color:var(--cyan);font-family:var(--ff-mono);font-size:9px">RBF</span>`:`<span style="color:var(--faint)">—</span>`;
+    const witnessHtml=(v.witness||[]).length?`<details style="margin-top:4px"><summary style="font-family:var(--ff-mono);font-size:9px;color:var(--amber-dim);cursor:pointer">${v.witness.length} witness item${v.witness.length!==1?'s':''}</summary>${(v.witness||[]).map((w,wi)=>`<div class="mono" style="margin-top:2px">[${wi}] ${w||'(empty)'}</div>`).join('')}</details>`:'';
+    const sigHtml=v.script_sig_hex?`<details style="margin-top:4px"><summary style="font-family:var(--ff-mono);font-size:9px;color:var(--amber-dim);cursor:pointer">scriptSig</summary><div class="asm-block">${asmColor(v.script_asm)}</div></details>`:'';
+    return `<tr><td style="font-family:var(--ff-mono);font-size:10px;color:var(--muted)">#${i}</td><td>${pill(v.script_type)}${sigHtml}${witnessHtml}</td><td>${shortAddr(v.address)}</td><td style="font-family:var(--ff-mono);font-size:10px">${fmt(v.prevout?.value_sats)}</td><td class="mono">${hex8(v.sequence)}</td><td>${rbfCell}</td><td>${rtlHtml}</td></tr>`;
+  }).join('');
+
+  const voutRows=(d.vout||[]).map(o=>{
+    let extra='';
+    if(o.script_type==='op_return'){ const val=o.op_return_data_utf8?`"${o.op_return_data_utf8}"`:(`0x${o.op_return_data_hex}`); extra=`<div style="font-family:var(--ff-mono);font-size:9px;color:var(--muted);margin-top:3px">${val} <span style="color:var(--amber-dim)">[${o.op_return_protocol}]</span></div>`; }
+    const asmRow=`<details style="margin-top:4px"><summary style="font-family:var(--ff-mono);font-size:9px;color:var(--amber-dim);cursor:pointer">script</summary><div class="asm-block">${asmColor(o.script_asm)}</div></details>`;
+    return `<tr><td style="font-family:var(--ff-mono);font-size:10px;color:var(--muted)">#${o.n}</td><td>${pill(o.script_type)}${extra}${asmRow}</td><td>${shortAddr(o.address)}</td><td style="font-family:var(--ff-mono);font-size:10px">${fmt(o.value_sats)}</td><td style="font-family:var(--ff-mono);font-size:9px;color:var(--muted)">${btc(o.value_sats)}</td></tr>`;
+  }).join('');
+
+  const ltMap={none:'None — no locktime',block_height:`Block height ${fmt(d.locktime_value)}`,unix_timestamp:`Unix timestamp ${d.locktime_value}`};
+  const ltHtml=ltMap[d.locktime_type]||d.locktime_value;
+
+  return `
+    ${warnsHtml?`<div class="warn-strip">${warnsHtml}</div>`:''}
+    <div class="story">
+      <div class="story-headline">${headline}</div>
+      <div class="story-sub">${subline}</div>
+      <div class="stat-row">
+        <div class="stat"><div class="lbl" data-tip="Unique transaction identifier">TXID</div><div class="val mono">${short(d.txid,12)}</div></div>
+        <div class="stat"><div class="lbl" data-tip="Amount paid to miners">Fee</div><div class="val amber">${fmt(fee)}<span class="unit">sats</span></div></div>
+        <div class="stat"><div class="lbl" data-tip="Fee per virtual byte">Rate</div><div class="val blue">${d.fee_rate_sat_vb}<span class="unit">sat/vB</span></div></div>
+        <div class="stat"><div class="lbl" data-tip="SegWit-adjusted size for fee calculation">vBytes</div><div class="val">${d.vbytes}<span class="unit">vB</span></div></div>
+        <div class="stat"><div class="lbl" data-tip="Raw BIP141 weight">Weight</div><div class="val purple">${fmt(d.weight)}<span class="unit">wu</span></div></div>
+        <div class="stat"><div class="lbl">Inputs</div><div class="val">${inCount}</div></div>
+        <div class="stat"><div class="lbl">Outputs</div><div class="val">${outCount}</div></div>
+        <div class="stat"><div class="lbl" data-tip="SegWit transactions enable the witness discount">SegWit</div><div class="val ${d.segwit?'green':'red'}">${d.segwit?'YES':'NO'}</div></div>
+      </div>
+      <div class="flow-wrap"><div class="flow-title">Value Flow — Inputs → Transaction → Outputs</div><svg id="flow-svg"></svg></div>
+    </div>
+    ${segwitHtml}
+    <div class="sect"><div class="sect-hdr open" onclick="toggle(this)"><span class="ico">↘</span><h3>Inputs (${inCount}) — <span style="font-weight:300;color:var(--muted)">What was spent</span></h3><span class="chevron">▼</span></div><div class="sect-body open"><p style="font-size:12px;color:var(--muted);margin-bottom:14px">Each <span data-tip="An input references a previous unspent output (UTXO)">input</span> destroys a previous unspent output. Total spent: <strong>${fmt(totalIn)} sats</strong>.</p><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Type / Script</th><th>Address</th><th>Sats</th><th>Sequence</th><th>RBF</th><th>Rel. Lock</th></tr></thead><tbody>${vinRows}</tbody></table></div></div></div>
+    <div class="sect"><div class="sect-hdr open" onclick="toggle(this)"><span class="ico">↗</span><h3>Outputs (${outCount}) — <span style="font-weight:300;color:var(--muted)">What was created</span></h3><span class="chevron">▼</span></div><div class="sect-body open"><p style="font-size:12px;color:var(--muted);margin-bottom:14px">Each <span data-tip="An output creates a new UTXO locked to a specific address">output</span> creates a new locked coin. Total created: <strong>${fmt(totalOut)} sats</strong>. ${fee>0?`Remaining <strong style="color:var(--cyan)">${fmt(fee)} sats</strong> go to the miner.`:''}</p><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Type / Script</th><th>Address</th><th>Sats</th><th>BTC</th></tr></thead><tbody>${voutRows}</tbody></table></div></div></div>
+    <div class="sect"><div class="sect-hdr" onclick="toggle(this)"><span class="ico">⌬</span><h3>Technical Details</h3><span class="chevron">▼</span></div><div class="sect-body"><div class="grid2"><div><table><tr><td style="color:var(--muted)">TXID</td><td class="mono">${d.txid}</td></tr><tr><td style="color:var(--muted)">WTXID</td><td class="mono">${d.wtxid||'<em style="color:var(--muted)">same as txid (legacy)</em>'}</td></tr><tr><td style="color:var(--muted)">Version</td><td>${d.version}</td></tr><tr><td style="color:var(--muted)">Locktime</td><td>${ltHtml}</td></tr><tr><td style="color:var(--muted)">Size</td><td>${d.size_bytes} B</td></tr><tr><td style="color:var(--muted)">Weight</td><td>${fmt(d.weight)} WU</td></tr><tr><td style="color:var(--muted)">vBytes</td><td>${d.vbytes} vB</td></tr><tr><td style="color:var(--muted)">RBF</td><td>${d.rbf_signaling?'<span style="color:var(--cyan)">Yes — replaceable</span>':'No'}</td></tr></table></div><div style="font-size:11px;color:var(--muted);line-height:1.8"><p style="margin-bottom:8px"><strong style="color:var(--text)">txid vs wtxid</strong><br>txid is computed from non-witness data only. wtxid includes witness — it's the true identifier in SegWit.</p><p><strong style="color:var(--text)">vByte</strong><br>Weight ÷ 4. Witness bytes weigh 1 unit vs 4 for normal bytes, giving the effective size used to price transactions.</p></div></div></div></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SVG FLOW
+// ═══════════════════════════════════════════════════════════════
+function drawFlow(d){
+  const svg=$('flow-svg'); if(!svg)return;
+  const ins=d.vin||[], outs=d.vout||[], fee=d.fee_sats||0, totalIn=d.total_input_sats||1;
+  const W=800,BOX_H=44,GAP=10,MID_X=W/2,COL_W=220,leftX=10,rightX=W-COL_W-10;
+  const INS_H=ins.reduce((a,_,i)=>a+BOX_H+(i<ins.length-1?GAP:0),0);
+  const outItems=[...outs,...(fee>0?[{_fee:true}]:[])];
+  const OUTS_H=outItems.reduce((a,_,i)=>a+BOX_H+(i<outItems.length-1?GAP:0),0);
+  const SVG_H=Math.max(INS_H,OUTS_H)+60;
+  const inStartY=(SVG_H-INS_H)/2, outStartY=(SVG_H-OUTS_H)/2, txY=SVG_H/2, txR=28;
+  let els=[];
+  els.push(`<defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter><marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#0c2540"/></marker><marker id="arr-cyan" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="rgba(0,212,255,.6)"/></marker></defs>`);
+  let iy=inStartY;
+  ins.forEach((inp,i)=>{
+    const my=iy+BOX_H/2,sats=inp.prevout?.value_sats||0,frac=totalIn>0?sats/totalIn:0,label=inp.script_type||'unknown',addr=inp.address?inp.address.slice(0,16)+'…':'—',pc=typeColor(inp.script_type);
+    els.push(`<rect x="${leftX}" y="${iy}" width="${COL_W}" height="${BOX_H}" rx="4" fill="#071428" stroke="#163666" stroke-width="1"/><rect x="${leftX}" y="${iy}" width="3" height="${BOX_H}" rx="2" fill="${pc}"/><text x="${leftX+12}" y="${iy+16}" font-family="Space Mono,monospace" font-size="9" fill="${pc}" letter-spacing="1">${label.toUpperCase()}</text><text x="${leftX+12}" y="${iy+28}" font-family="Space Mono,monospace" font-size="9" fill="#3a6b99">${addr}</text><text x="${leftX+COL_W-8}" y="${iy+24}" font-family="Space Mono,monospace" font-size="10" fill="#d6eaf8" text-anchor="end">${fmt(sats)}</text><path d="M${leftX+COL_W},${my} C${MID_X-40},${my} ${MID_X-40},${txY} ${MID_X-txR-2},${txY}" stroke="#163666" stroke-width="${1+frac*3}" fill="none" marker-end="url(#arr)"/>`);
+    iy+=BOX_H+GAP;
+  });
+  els.push(`<circle cx="${MID_X}" cy="${txY}" r="${txR}" fill="#071428" stroke="rgba(0,212,255,0.5)" stroke-width="1.5" filter="url(#glow)"/><text x="${MID_X}" y="${txY-6}" font-family="Bebas Neue,sans-serif" font-size="13" fill="#00d4ff" text-anchor="middle" letter-spacing="2">TX</text><text x="${MID_X}" y="${txY+10}" font-family="Space Mono,monospace" font-size="8" fill="#3a6b99" text-anchor="middle">v${d.version||2}</text>`);
+  let oy=outStartY;
+  [...outs,...(fee>0?[{_fee:true,value_sats:fee}]:[])].forEach((out,i)=>{
+    const my=oy+BOX_H/2,sats=out.value_sats||0,frac=totalIn>0?sats/totalIn:0,isFee=out._fee;
+    const label=isFee?'MINER FEE':(out.script_type||'unknown').toUpperCase();
+    const addr=isFee?'To block miner':(out.address?out.address.slice(0,16)+'…':'—');
+    const color=isFee?'#f87171':typeColor(out.script_type);
+    const lineColor=isFee?'rgba(255,77,106,.3)':'rgba(0,212,255,.25)';
+    const marker=isFee?'arr':'arr-cyan';
+    els.push(`<path d="M${MID_X+txR+2},${txY} C${MID_X+40},${txY} ${MID_X+40},${my} ${rightX},${my}" stroke="${lineColor}" stroke-width="${1+frac*3}" fill="none" marker-end="url(#${marker})"/><rect x="${rightX}" y="${oy}" width="${COL_W}" height="${BOX_H}" rx="4" fill="${isFee?'rgba(255,77,106,.05)':'#1a1a1a'}" stroke="${isFee?'rgba(255,77,106,.3)':'#2e2e2e'}" stroke-width="1"/><rect x="${rightX+COL_W-3}" y="${oy}" width="3" height="${BOX_H}" rx="2" fill="${color}"/><text x="${rightX+8}" y="${oy+16}" font-family="Space Mono,monospace" font-size="9" fill="${color}" letter-spacing="1">${label}</text><text x="${rightX+8}" y="${oy+28}" font-family="Space Mono,monospace" font-size="9" fill="#3a6b99">${addr}</text><text x="${rightX+COL_W-10}" y="${oy+24}" font-family="Space Mono,monospace" font-size="10" fill="${isFee?'#ff4d6a':'#d6eaf8'}" text-anchor="end">${fmt(sats)}</text>`);
+    oy+=BOX_H+GAP;
+  });
+  svg.setAttribute('viewBox',`0 0 ${W} ${SVG_H}`);
+  svg.innerHTML=els.join('');
+}
+
+function typeColor(t){
+  const m={p2pkh:'#00d4ff',p2sh:'#a78bfa',p2wpkh:'#00ff9d',p2wsh:'#00cc7a',p2tr:'#40e8ff',p2tr_keypath:'#40e8ff',p2tr_scriptpath:'#0099bb',op_return:'#0c2540',unknown:'#ff4d6a','p2sh-p2wpkh':'#00cc7a','p2sh-p2wsh':'#00aa66'};
+  return m[t]||'#3a6b99';
+}
+
+function asmColor(asm){
+  if(!asm) return '<span style="color:var(--faint)">(empty)</span>';
+  return asm.split(' ').map(tok=>{ if(tok.startsWith('OP_PUSH')||tok.startsWith('OP_DATA')||tok.startsWith('OP_'))return`<span class="asm-op">${tok}</span>`; if(/^[0-9a-f]{8,}$/.test(tok))return`<span class="asm-data">${tok}</span>`; return`<span class="asm-special">${tok}</span>`; }).join(' ');
+}
+
+function renderErr(error){ return `<div class="errbox"><h3>⚠ ${error?.code||'Error'}</h3><pre>${error?.message||'Unknown error'}</pre></div>`; }
+
+// ═══════════════════════════════════════════════════════════════
+// BLOCK MODE
+// ═══════════════════════════════════════════════════════════════
+async function runBlock(){
+  const errEl=$('blk-err'); errEl.textContent='';
+  const blk=$('bf-blk').files[0],rev=$('bf-rev').files[0],xor=$('bf-xor').files[0];
+  if(!blk||!rev||!xor){ errEl.textContent='Select all 3 files first.'; return; }
+  show('blk-load',true); $('blk-out').innerHTML='';
+  const fd=new FormData(); fd.append('blk_file',blk); fd.append('rev_file',rev); fd.append('xor_file',xor);
+  try{
+    const resp=await fetch('/api/analyze/block',{method:'POST',body:fd});
+    const data=await resp.json(); show('blk-load',false);
+    $('blk-out').innerHTML=renderBlocks(data);
+  }catch(e){ show('blk-load',false); errEl.textContent='Error: '+e.message; }
+}
+
+function renderBlocks(data){
+  if(!data.ok&&data.error)return renderErr(data.error);
+  const blocks=data.blocks||[];
+  if(!blocks.length)return`<div style="color:var(--muted);padding:40px;text-align:center;font-family:var(--ff-mono);font-size:11px">NO BLOCKS FOUND</div>`;
+  return blocks.map(b=>renderBlock(b)).join('');
+}
+
+function renderBlock(b){
+  if(!b.ok)return renderErr(b.error);
+  const h=b.block_header,st=b.block_stats||{},cb=b.coinbase||{};
+  const chips=Object.entries(st.script_type_summary||{}).map(([k,v])=>`<span class="script-chip" style="border-color:${typeColor(k)}22;color:${typeColor(k)}">${k.toUpperCase()} ×${v}</span>`).join('');
+  const statsHtml=`<div class="block-stats-grid"><div class="stat"><div class="lbl">Block Height</div><div class="val">${cb.bip34_height??'?'}</div></div><div class="stat"><div class="lbl">Transactions</div><div class="val">${b.tx_count}</div></div><div class="stat"><div class="lbl">Total Fees</div><div class="val amber">${fmt(st.total_fees_sats)}<span class="unit">sats</span></div></div><div class="stat"><div class="lbl">Avg Fee Rate</div><div class="val blue">${st.avg_fee_rate_sat_vb}<span class="unit">sat/vB</span></div></div><div class="stat"><div class="lbl">Total Weight</div><div class="val purple">${fmt(st.total_weight)}<span class="unit">wu</span></div></div><div class="stat"><div class="lbl">Merkle Valid</div><div class="val ${h.merkle_root_valid?'green':'red'}">${h.merkle_root_valid?'✓ YES':'✗ NO'}</div></div><div class="stat"><div class="lbl">Coinbase Out</div><div class="val">${fmt(cb.total_output_sats)}<span class="unit">sats</span></div></div></div>`;
+  const txRows=(b.transactions||[]).slice(0,50).map((tx,i)=>{
+    if(!tx.ok)return`<div class="tx-row"><span style="color:var(--red)">Error</span><span class="mono">${tx.error?.code}</span></div>`;
+    const detailId=`tx-${h.block_hash.slice(0,8)}-${i}`,isCb=i===0,feeColor=tx.fee_sats>10000?'var(--amber)':tx.fee_sats>0?'var(--text)':'var(--faint)';
+    return`<div class="tx-row" onclick="toggleTxDetail('${detailId}')"><span style="font-family:var(--ff-mono);font-size:9px;color:${isCb?'var(--amber)':'var(--muted)'}">${isCb?'⛏ COINBASE':`#${i}`}</span><span class="mono">${short(tx.txid,12)}</span><span class="hide-sm">${pill(tx.vin?.[0]?.script_type||'?')}</span><span style="font-family:var(--ff-mono);font-size:10px;color:${feeColor}">${fmt(tx.fee_sats)}</span><span class="hide-sm" style="font-family:var(--ff-mono);font-size:10px;color:var(--muted)">${tx.vbytes} vB</span></div><div class="tx-detail" id="${detailId}">${renderTxCompact(tx)}</div>`;
+  }).join('');
+  const more=(b.transactions?.length||0)>50?`<div style="font-family:var(--ff-mono);font-size:9px;color:var(--muted);padding:12px 0;text-align:center">… and ${b.transactions.length-50} more</div>`:'';
+  const uid=h.block_hash.slice(0,12);
+  return`<div class="block-card"><div class="block-hdr" onclick="toggleBlock('${uid}')"><div><div class="block-hash">${h.block_hash}</div><div class="block-pills"><span class="bpill">Height <b>${cb.bip34_height??'?'}</b></span><span class="bpill">Txs <b>${b.tx_count}</b></span><span class="bpill">Fees <b>${fmt(st.total_fees_sats)} sats</b></span><span class="bpill">Avg <b>${st.avg_fee_rate_sat_vb} sat/vB</b></span><span class="bpill">Merkle <b style="color:${h.merkle_root_valid?'var(--green)':'var(--red)'}">${h.merkle_root_valid?'✓':'✗'}</b></span></div></div><div class="block-chevron" id="chevron-${uid}">▼</div></div><div class="block-body" id="body-${uid}">${statsHtml}<div class="script-chips">${chips}</div><hr class="divider"><div style="display:grid;grid-template-columns:80px 1fr 100px 100px 80px;gap:12px;padding:6px 0;margin-bottom:4px"><span style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1px">IDX</span><span style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1px">TXID</span><span style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1px" class="hide-sm">TYPE</span><span style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1px">FEE (SATS)</span><span style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:1px" class="hide-sm">SIZE</span></div>${txRows}${more}</div></div>`;
+}
+
+function toggleBlock(uid){ const body=$('body-'+uid),chev=$('chevron-'+uid); if(body){ const open=body.style.display==='block'; body.style.display=open?'none':'block'; if(chev)chev.style.transform=open?'':'rotate(180deg)'; } }
+function toggleTxDetail(id){ const el=$(id); if(el)el.classList.toggle('open'); }
+
+function renderTxCompact(tx){
+  const vinS=(tx.vin||[]).slice(0,4).map(v=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--faint)">${pill(v.script_type)}<span class="mono">${short(v.txid)}</span><span style="margin-left:auto;font-family:var(--ff-mono);font-size:10px">${fmt(v.prevout?.value_sats)} sats</span></div>`).join('');
+  const voutS=(tx.vout||[]).slice(0,4).map(o=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--faint)">${pill(o.script_type)}<span class="addr">${o.address?short(o.address,10):'—'}</span><span style="margin-left:auto;font-family:var(--ff-mono);font-size:10px">${fmt(o.value_sats)} sats</span></div>`).join('');
+  return`<div class="grid2" style="gap:12px"><div><div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">INPUTS</div>${vinS}${(tx.vin||[]).length>4?`<div style="font-size:10px;color:var(--muted);padding-top:4px">+${tx.vin.length-4} more</div>`:''}</div><div><div style="font-family:var(--ff-mono);font-size:8px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">OUTPUTS</div>${voutS}${(tx.vout||[]).length>4?`<div style="font-size:10px;color:var(--muted);padding-top:4px">+${tx.vout.length-4} more</div>`:''}</div></div><div style="margin-top:10px;font-family:var(--ff-mono);font-size:9px;color:var(--muted)">Fee: <span style="color:var(--cyan)">${fmt(tx.fee_sats)} sats</span> · ${tx.vbytes} vB · ${fmt(tx.weight)} wu · ${tx.segwit?'<span style="color:var(--green)">SegWit</span>':'Legacy'}${tx.rbf_signaling?' · <span style="color:var(--amber)">RBF</span>':''}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FLOATING CHATBOT
+// ═══════════════════════════════════════════════════════════════
+let chatOpen = false;
+let configOpen = true;
+let aiProvider = 'openai';
+let aiCtx = null;
+let chatHistory = [];
+let chatBusy = false;
+
+function toggleChat(){
+  chatOpen = !chatOpen;
+  const panel = $('chat-panel');
+  panel.classList.toggle('open', chatOpen);
+}
+
+function toggleConfig(){
+  configOpen = !configOpen;
+  $('cp-config').style.display = configOpen ? 'block' : 'none';
+  $('cfg-toggle').textContent = configOpen ? '✕ close' : '⚙ API';
+}
+
+function setProvider(p){
+  aiProvider = p;
+  ['openai','gemini'].forEach(x=>$('prov-'+x).classList.toggle('on', x===p));
+  const isOAI = p==='openai';
+  const gemGrps = ['gem-grp-3','gem-grp-25','gem-grp-20','gem-grp-gemma','gem-grp-alias'];
+  const oaiGrps = ['oai-grp'];
+  // Show/hide OpenAI optgroup
+  const oaiGrp = $('oai-grp');
+  if(oaiGrp) oaiGrp.style.display = isOAI ? '' : 'none';
+  // Show/hide Gemini optgroups
+  gemGrps.forEach(id=>{ const el=$(id); if(el) el.style.display = isOAI ? 'none' : ''; });
+  $('cp-model').value = isOAI ? 'gpt-4o-mini' : 'gemini-2.5-flash';
+  $('cp-key').placeholder = isOAI ? 'sk-... (OpenAI API key)' : 'AIza... (Google API key)';
+  updateKeyStatus();
+}
+
+function onKeyInput(){
+  const k=$('cp-key').value.trim();
+  $('cp-send').disabled = !k;
+  updateKeyStatus();
+  // Auto-hide config if key looks valid
+  if(k.length > 20) {
+    configOpen = false;
+    $('cp-config').style.display = 'none';
+    $('cfg-toggle').textContent = '⚙ API';
+  }
+}
+
+function updateKeyStatus(){
+  const k=$('cp-key').value.trim(), el=$('cp-key-status');
+  if(!k){ el.textContent=''; return; }
+  const valid = aiProvider==='openai' ? k.startsWith('sk-') : k.startsWith('AIza');
+  el.textContent = valid ? '✓ KEY FORMAT OK' : '⚠ FORMAT UNEXPECTED — CHECK KEY';
+  el.style.color = valid ? 'var(--green)' : 'var(--amber)';
+}
+
+function setAiCtx(txData){
+  if(!txData||!txData.ok) return;
+  aiCtx = txData;
+  const short_id = txData.txid ? txData.txid.slice(0,10)+'…'+txData.txid.slice(-5) : '?';
+  const ins = txData.vin?.length||0, outs = txData.vout?.length||0;
+  $('cp-ctx-text').textContent = `TX ${short_id} · ${ins}in · ${outs}out · ${(txData.fee_sats||0).toLocaleString()} sats fee`;
+  $('cp-ctx-strip').classList.add('on');
+  $('cp-ctx-pill').classList.add('on');
+  $('fab-ctx-dot').classList.add('on');
+  // Show context quick prompts
+  ['qp-tx-1','qp-tx-2','qp-tx-3','qp-tx-4'].forEach(id=>{ const el=$(id); if(el)el.style.display=''; });
+}
+
+function clearCtx(){
+  aiCtx = null;
+  $('cp-ctx-strip').classList.remove('on');
+  $('cp-ctx-pill').classList.remove('on');
+  $('fab-ctx-dot').classList.remove('on');
+  ['qp-tx-1','qp-tx-2','qp-tx-3','qp-tx-4'].forEach(id=>{ const el=$(id); if(el)el.style.display='none'; });
+}
+
+function qp(text){ $('cp-input').value=text; sendChat(); }
+function chatKey(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendChat(); } }
+function autoResize(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,110)+'px'; }
+
+function buildSystemPrompt(){
+  let sys = `You are a Bitcoin blockchain analyst assistant embedded in Chain Lens, a Bitcoin transaction and block analysis tool.
+
+Your role: clearly explain Bitcoin concepts to both technical and non-technical users.
+Scope: ONLY answer questions about Bitcoin — transactions, blocks, UTXOs, scripts, fees, SegWit, Taproot, timelocks, mining, addresses, wallets, mempool, and related topics.
+If asked about unrelated topics, politely redirect to Bitcoin/blockchain.
+Style: concise, plain English. Use bullet points for lists. Bold key terms with **term**. Use \`code\` for values.
+Keep answers under 200 words unless depth is required.`;
+
+  if(aiCtx){
+    const tx = aiCtx;
+    const ins = (tx.vin||[]).map((v,i)=>`  Input ${i}: ${v.script_type||'?'} — ${(v.prevout?.value_sats||0).toLocaleString()} sats — addr: ${v.address||'?'}`).join('\n');
+    const outs = (tx.vout||[]).map(o=>`  Output ${o.n}: ${o.script_type||'?'} — ${(o.value_sats||0).toLocaleString()} sats — addr: ${o.address||'?'}${o.script_type==='op_return'?` — data: "${o.op_return_data_utf8||o.op_return_data_hex}"`:''}`).join('\n');
+    const warns = (tx.warnings||[]).map(w=>w.code).join(', ')||'none';
+    sys += `
+
+CURRENT TRANSACTION CONTEXT (user just analyzed this):
+- TXID: ${tx.txid}
+- Version: ${tx.version} | Locktime: ${tx.locktime_value} (${tx.locktime_type})
+- SegWit: ${tx.segwit} | RBF: ${tx.rbf_signaling}
+- Size: ${tx.size_bytes}B | Weight: ${tx.weight} WU | vBytes: ${tx.vbytes}
+- Total in: ${(tx.total_input_sats||0).toLocaleString()} sats
+- Total out: ${(tx.total_output_sats||0).toLocaleString()} sats
+- Fee: ${(tx.fee_sats||0).toLocaleString()} sats (${tx.fee_rate_sat_vb} sat/vB)
+- Warnings: ${warns}
+Inputs:\n${ins}
+Outputs:\n${outs}${tx.segwit_savings?`\nSegWit savings: ${tx.segwit_savings.savings_pct}% block space saved`:''}
+
+Refer to this specific transaction's data when answering questions about "this transaction".`;
+  }
+  return sys;
+}
+
+// Active abort controller so we can cancel mid-stream
+let streamAbort = null;
+
+async function sendChat(){
+  if(chatBusy) return;
+  const input   = $('cp-input');
+  const apiKey  = $('cp-key').value.trim();
+  const text    = input.value.trim();
+  if(!text) return;
+  if(!apiKey){ appendErrMsg('Please enter an API key in the ⚙ API section.'); return; }
+
+  const empty = $('cp-empty');
+  if(empty) empty.remove();
+
+  appendMsg('user', text);
+  input.value=''; input.style.height='38px';
+  chatHistory.push({role:'user', content:text});
+
+  // Create streaming bubble immediately (replaces typing indicator)
+  const bubble = appendStreamBubble();
+  $('cp-send').disabled = true;
+  chatBusy = true;
+  streamAbort = new AbortController();
+  let fullText = '';
+
+  try{
+    const model = $('cp-model').value;
+    const sys   = buildSystemPrompt();
+
+    if(aiProvider === 'openai'){
+      fullText = await streamOpenAI(apiKey, model, sys, bubble, streamAbort.signal);
+    } else {
+      fullText = await streamGemini(apiKey, model, sys, text, bubble, streamAbort.signal);
+    }
+
+    finishStreamBubble(bubble, fullText);
+    chatHistory.push({role:'assistant', content:fullText});
+  }catch(e){
+    if(e.name === 'AbortError'){
+      // User cancelled or timed out — keep whatever streamed so far
+      if(fullText) finishStreamBubble(bubble, fullText);
+      else { bubble.remove(); appendErrMsg('Response cancelled or timed out.'); }
+    } else {
+      bubble.remove();
+      appendErrMsg(e.message || 'API error — check your key and try again.');
+    }
+  }finally{
+    chatBusy    = false;
+    streamAbort = null;
+    $('cp-send').disabled = !$('cp-key').value.trim();
+  }
+}
+
+// ── Streaming: OpenAI SSE ────────────────────────────────────────
+async function streamOpenAI(apiKey, model, sysPrompt, bubble, signal){
+  const histSlice = chatHistory.slice(-20);
+  const messages  = [{role:'system', content:sysPrompt}, ...histSlice.slice(0,-1)];
+
+  const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+apiKey},
+    body: JSON.stringify({model, messages, max_tokens:800, temperature:0.4, stream:true}),
+    signal,
+  });
+  if(!resp.ok){
+    let e = 'OpenAI error '+resp.status;
+    try{ const j=await resp.json(); e=j.error?.message||e; }catch(_){}
+    throw new Error(e);
+  }
+
+  const reader  = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let full = '';
+  let buf  = '';
+
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += decoder.decode(value, {stream:true});
+    const lines = buf.split('\n');
+    buf = lines.pop(); // keep incomplete line for next chunk
+
+    for(const line of lines){
+      const trimmed = line.replace(/^data:\s*/, '');
+      if(!trimmed || trimmed === '[DONE]') continue;
+      try{
+        const chunk = JSON.parse(trimmed);
+        const delta = chunk.choices?.[0]?.delta?.content || '';
+        if(delta){
+          full += delta;
+          updateStreamBubble(bubble, full);
+        }
+      }catch(_){}
+    }
+  }
+  return full || '(empty response)';
+}
+
+// ── Streaming: Gemini SSE ────────────────────────────────────────
+async function streamGemini(apiKey, model, sysPrompt, userMsg, bubble, signal){
+  const histSlice = chatHistory.slice(-20);
+  const contents  = histSlice.slice(0,-1).map(m=>({
+    role: m.role==='assistant'?'model':'user',
+    parts:[{text:m.content}]
+  }));
+  contents.push({role:'user', parts:[{text:userMsg}]});
+
+  const modelPath = model.includes('/') ? model : `models/${model}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      system_instruction: {parts:[{text:sysPrompt}]},
+      contents,
+      generationConfig: {maxOutputTokens:800, temperature:0.4},
+    }),
+    signal,
+  });
+  if(!resp.ok){
+    let e = 'Gemini error '+resp.status;
+    try{ const j=await resp.json(); e=j.error?.message||e; }catch(_){}
+    throw new Error(e);
+  }
+
+  const reader  = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let full = '';
+  let buf  = '';
+
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += decoder.decode(value, {stream:true});
+    const lines = buf.split('\n');
+    buf = lines.pop();
+
+    for(const line of lines){
+      const trimmed = line.replace(/^data:\s*/, '');
+      if(!trimmed) continue;
+      try{
+        const chunk = JSON.parse(trimmed);
+        // Check for safety block
+        const reason = chunk.candidates?.[0]?.finishReason;
+        if(reason === 'SAFETY') throw new Error('Response blocked by Gemini safety filters.');
+        const delta = chunk.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if(delta){
+          full += delta;
+          updateStreamBubble(bubble, full);
+        }
+      }catch(parseErr){
+        if(parseErr.message.includes('safety')) throw parseErr;
+        // ignore parse errors on partial chunks
+      }
+    }
+  }
+
+  if(!full) throw new Error('Empty response from Gemini — model may not support streaming.');
+  return full;
+}
+
+// ── Streaming DOM helpers ────────────────────────────────────────
+function appendStreamBubble(){
+  const msgs = $('cp-msgs');
+  const d    = document.createElement('div');
+  d.className = 'msg ai streaming';
+  d.innerHTML = `<div class="msg-av ai">AI</div><div class="msg-body stream-body"><span class="stream-cursor"></span></div>`;
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+
+function updateStreamBubble(bubble, text){
+  const body = bubble.querySelector('.stream-body');
+  if(!body) return;
+  body.innerHTML = fmtAi(text) + '<span class="stream-cursor"></span>';
+  const msgs = $('cp-msgs');
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function finishStreamBubble(bubble, text){
+  bubble.classList.remove('streaming');
+  const body = bubble.querySelector('.stream-body');
+  if(body) body.innerHTML = fmtAi(text);
+  const msgs = $('cp-msgs');
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendMsg(role, text){
+  const msgs = $('cp-msgs');
+  const d = document.createElement('div');
+  d.className=`msg ${role}`;
+  d.innerHTML=`<div class="msg-av ${role}">${role==='ai'?'AI':'YOU'}</div><div class="msg-body">${role==='ai'?fmtAi(text):esc(text)}</div>`;
+  msgs.appendChild(d);
+  msgs.scrollTop=msgs.scrollHeight;
+  return d;
+}
+
+function appendTyping(){
+  const msgs=$('cp-msgs'), id='ty-'+Date.now();
+  const d=document.createElement('div');
+  d.id=id; d.className='msg ai';
+  d.innerHTML=`<div class="msg-av ai">AI</div><div class="msg-body"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+  msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+  return id;
+}
+
+function appendErrMsg(msg){
+  const msgs=$('cp-msgs'), d=document.createElement('div');
+  d.className='msg ai';
+  d.innerHTML=`<div class="msg-av ai" style="background:var(--red);color:#fff">!</div><div class="msg-body err">${esc(msg)}</div>`;
+  msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight;
+}
+
+function removeEl(id){ const el=$(id); if(el)el.remove(); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtAi(text){
+  return esc(text)
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/^[-•]\s+(.+)$/gm,'<li>$1</li>')
+    .replace(/((<li>.*<\/li>\n?)+)/g,'<ul>$1</ul>')
+    .replace(/\n(?!<)/g,'<br>');
+}
+</script>
+</body>
+</html>
